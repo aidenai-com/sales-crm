@@ -1,0 +1,53 @@
+# Optional overlay: runs the API and Nginx in containers too.
+#
+# Not used for local development — the API runs on the host instead, because building the
+# image requires PyPI access through this network's TLS-inspecting proxy, whose CA the
+# build container does not trust. Add that CA to backend/Dockerfile before using this.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.app.yml up --build
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crm-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the database is reachable by service name.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080,http://localhost}
+      SEED_ON_START: ${SEED_ON_START:-true}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@aidenai.com}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-admin1234}
+      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-password1234}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # The first start runs migrations and the seed before it begins serving.
+      start_period: 90s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: crm-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${WEB_PORT:-8080}:80"

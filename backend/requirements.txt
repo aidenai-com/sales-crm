@@ -1,0 +1,27 @@
+# Web framework
+fastapi==0.121.2
+uvicorn[standard]==0.38.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.44
+asyncpg==0.30.0
+alembic==1.16.5
+
+# Settings and validation
+pydantic==2.12.4
+pydantic-settings==2.12.0
+email-validator==2.3.0
+
+# Auth
+bcrypt==5.0.0
+pyjwt==2.11.0
+
+# Object storage. S3 API, so this same client talks to MinIO locally and AWS S3,
+# Cloudflare R2 or Backblaze B2 in production.
+boto3==1.40.45
+
+# Tests
+pytest==8.4.2
+pytest-asyncio==1.2.0
+httpx==0.28.1

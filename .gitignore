@@ -1,0 +1,48 @@
+# Secrets. `.env` holds a database password; the `.example` files are the ones to commit.
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Build caches. `tsc -b` writes these next to the tsconfig that produced them; they hold
+# absolute paths from the machine that built them, so they are noise in every diff.
+*.tsbuildinfo
+.vite/
+
+# Test and coverage output
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Session scratch
+.remember/now.md

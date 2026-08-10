@@ -1,0 +1,339 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Design tokens — copied verbatim from design.md's Tailwind v4 @theme block.
+   This file is the single source of style truth. Do not introduce literal
+   hex values in component files; add a token here instead.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  /* Colors */
+  --color-ink-navy: #0b3558;
+  --color-signal-blue: #006bff;
+  --color-slate-gray: #476788;
+  --color-mist-gray: #a6bbd1;
+  --color-cloud: #f8f9fb;
+  --color-paper: #ffffff;
+  --color-pebble: #f0f3f8;
+  --color-hairline: #d4e0ed;
+  --color-carbon: #0a0a0a;
+  --color-coral-magenta: #e55cff;
+  --color-sky-cyan: #0099ff;
+  --color-deep-cobalt: #004eba;
+
+  /* Typography — Gilroy is licensed; design.md names Manrope as the substitute. */
+  --font-gilroy: 'Manrope', 'Gilroy', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* The one editorial voice in an otherwise sans-serif product. Used for the landing
+     page manifesto line only — never inside the workspace, where density wins. */
+  --font-voice: 'Newsreader', Georgia, 'Times New Roman', serif;
+
+  /* Typography — Scale */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.5;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.4;
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-button: 18px;
+  --text-button--line-height: 1.6;
+  --text-body-lg: 20px;
+  --text-body-lg--line-height: 1.4;
+  --text-subheading: 28px;
+  --text-subheading--line-height: 1.4;
+  --text-heading-sm: 38px;
+  --text-heading-sm--line-height: 1.21;
+  --text-heading: 50px;
+  --text-heading--line-height: 1.2;
+  --text-heading-lg: 68px;
+  --text-heading-lg--line-height: 1.2;
+  --text-display: 80px;
+  --text-display--line-height: 1.2;
+
+  /* Spacing */
+  --spacing-8: 8px;
+  --spacing-16: 16px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-64: 64px;
+  --spacing-72: 72px;
+  --spacing-96: 96px;
+
+  /* Border Radius */
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-full: 50px;
+
+  /* Shadows — all elevation is blue-tinted per design.md; never neutral black. */
+  --shadow-sm: rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 4px 10px 0px, rgba(71, 103, 136, 0.05) 0px 10px 20px 0px;
+  --shadow-sm-2: rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 8px 15px 0px, rgba(71, 103, 136, 0.08) 0px 30px 50px 0px;
+  --shadow-sm-3: rgba(71, 103, 136, 0.04) 0px 4px 5px 0px,
+    rgba(71, 103, 136, 0.03) 0px 8px 15px 0px, rgba(71, 103, 136, 0.06) 0px 15px 30px 0px;
+}
+
+/* ---------------------------------------------------------------------------
+   Additions. design.md defines no status palette, and a CRM must show risk.
+   Kept to the minimum: exactly one new hue.
+
+   - healthy      -> Slate Gray on Pebble. Quiet by design; nothing needs doing.
+   - closing-soon -> Deep Cobalt on badge fill. This is design.md's Pill Badge, verbatim.
+   - at-risk      -> the one added colour, because risk has to be visible at a glance.
+   --------------------------------------------------------------------------- */
+@theme {
+  --container-page: 1200px;
+
+  /* design.md's Pill Badge specifies this fill inline but does not tokenize it. */
+  --color-badge-fill: #e6f0ff;
+
+  --color-risk: #c8324f;
+  --color-risk-fill: #fdeaee;
+
+  /* design.md's Dark CTA Button specifies a hover fill inline without tokenizing it.
+     It needs a name so the dark theme can override it. */
+  --color-ink-navy-hover: #0e4272;
+
+  /* Modal scrim. In light mode this is Ink Navy, exactly as before it had a name — but
+     a scrim is a different job from text, and under dark the two must diverge: tinting
+     an overlay with near-white text colour would wash the screen out. */
+  --color-scrim: #0b3558;
+
+  /* -------------------------------------------------------------------------
+     Chart series.
+
+     Not the brand hues, and deliberately so. Signal Blue against Coral Magenta —
+     the obvious pick from the palette above — collapses under protanopia: the two
+     measure 4.4 apart in OKLab, where 8 is the target and 6 the floor. A reader
+     with the most common form of colour blindness would see one series. Blue
+     against orange measures 24.7 light / 26.8 dark, and clears the lightness,
+     chroma and 3:1 contrast checks against both card surfaces.
+
+     Two slots is the whole palette because no chart on the Analytics screen
+     carries more than two series. A third would have to be validated against
+     these two before it could be added — it is not a free choice.
+
+     Series colour is identity only. Values, labels and legend text stay in the
+     ink tokens; a colour never carries meaning on its own here, which is why
+     every chart also ships a legend and a table view.
+     ------------------------------------------------------------------------- */
+  --color-viz-1: #2a78d6;
+  --color-viz-2: #eb6834;
+
+  /* Outcome states. Reserved meaning — never reused as "series 3". Both clear 3:1
+     on the light and dark card surfaces; they still ship with a text label rather
+     than relying on the fill. */
+  --color-viz-won: #0ca30c;
+  --color-viz-lost: #d03b3b;
+
+  /* The track a bar sits in, and the rule a chart is measured against. */
+  --color-viz-track: #eef2f7;
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme.
+
+   design.md documents one theme (light), so these values are additions rather
+   than transcriptions. The approach keeps the token *names* and swaps only their
+   values, which means no component changes and no second set of class names —
+   every `bg-paper` / `text-ink-navy` in the app follows automatically.
+
+   The consequence to hold in mind: under dark, the names describe roles, not
+   literal colours. `ink-navy` is the primary text colour, and in dark that text
+   is near-white. Read the names as "primary text", "card surface", "hairline
+   border" and they stay accurate.
+
+   Hues are the same navy family as light mode, so it reads as the same product
+   at night. The blue-tinted elevation rule survives too — the shadows below are
+   a deep navy-black rather than neutral black.
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces, canvas up through elevated card. */
+  --color-cloud: #0a1524;
+  --color-paper: #111f31;
+  --color-pebble: #18293d;
+  --color-hairline: #263b52;
+
+  /* Text, brightest first. Still never pure white, for the same reason light mode
+     never uses pure black. */
+  --color-ink-navy: #eaf1f9;
+  --color-ink-navy-hover: #d3e2f2;
+  --color-slate-gray: #a3b8ce;
+  --color-mist-gray: #6f87a2;
+  --color-carbon: #f8f9fb;
+
+  /* Actions. Signal Blue is lifted, because #006bff on a dark canvas is too dim
+     to read as the primary action. */
+  --color-signal-blue: #3d8bff;
+  --color-deep-cobalt: #9cc4ff;
+  --color-badge-fill: #17304e;
+
+  --color-scrim: #030a14;
+
+  /* Risk stays the loudest thing on the screen. */
+  --color-risk: #ff8098;
+  --color-risk-fill: #3b1a23;
+
+  /* Chart series, stepped for the dark surface rather than flipped. Same two hues,
+     re-validated against #111f31: CVD separation 26.8, both inside the dark
+     lightness band, both above 3:1. The won/lost steps are unchanged — they already
+     clear 3:1 on both surfaces, and a status colour that moved between themes would
+     stop being a fixed scale. */
+  --color-viz-1: #3987e5;
+  --color-viz-2: #d95926;
+
+  --color-viz-track: #1b2e44;
+}
+
+/* ---------------------------------------------------------------------------
+   Dark elevation.
+
+   Colour utilities compile to `var(--color-*)`, so the token swap above is enough
+   for them. Shadow utilities do not: Tailwind inlines the shadow layers into
+   `--tw-shadow` at build time, so redefining `--shadow-sm` after the fact has no
+   effect. The utilities are therefore restated here for dark, in Tailwind's own
+   `var(--tw-shadow-color, …)` layer form so `shadow-<color>` still overrides them.
+
+   Light mode's near-invisible 4% tint would erase elevation entirely on a dark
+   canvas, and elevation is how a drawer reads as being above the board. Still not
+   neutral black — this is a deep navy, matching the light theme's rule.
+   --------------------------------------------------------------------------- */
+[data-theme='dark'] .shadow-sm {
+  --tw-shadow: var(--tw-shadow-color, rgba(3, 10, 20, 0.4)) 0px 4px 5px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.3)) 0px 4px 10px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.35)) 0px 10px 20px 0px;
+}
+
+[data-theme='dark'] .shadow-sm-2 {
+  --tw-shadow: var(--tw-shadow-color, rgba(3, 10, 20, 0.4)) 0px 4px 5px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.3)) 0px 8px 15px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.5)) 0px 30px 50px 0px;
+}
+
+[data-theme='dark'] .shadow-sm-3 {
+  --tw-shadow: var(--tw-shadow-color, rgba(3, 10, 20, 0.4)) 0px 4px 5px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.3)) 0px 8px 15px 0px,
+    var(--tw-shadow-color, rgba(3, 10, 20, 0.45)) 0px 15px 30px 0px;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion.
+
+   One easing curve for interface feedback and one duration scale, so hovers,
+   presses, and spinners feel like the same system rather than separate effects.
+   The curve is a gentle ease-out: quick to respond, unhurried to settle.
+   --------------------------------------------------------------------------- */
+@theme {
+  --ease-ui: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-hover: 160ms;
+  --duration-press: 90ms;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Skeleton shimmer: a slow breath, not a flash. */
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Indeterminate progress: a sweep that crosses and repeats, never pretending to measure. */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%) scaleX(0.4);
+  }
+  50% {
+    transform: translateX(0%) scaleX(0.6);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.4);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+
+/* Toasts rise from the bottom edge they are anchored to, rather than sliding in from the
+   side like the drawer. The direction should say where the thing came from. */
+@keyframes toast-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+
+/* A toast's remaining time, drawn as a shrinking hairline. Decoration only — the dismissal
+   is owned by a real timer in app/toast.tsx, so this never runs under reduced motion and
+   nothing depends on it firing. */
+@keyframes toast-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--color-cloud);
+    color: var(--color-ink-navy);
+    font-family: var(--font-gilroy);
+    font-size: var(--text-body);
+  }
+
+  /* design.md never uses pure black for text. Headings inherit Ink Navy. */
+  h1,
+  h2,
+  h3 {
+    color: var(--color-ink-navy);
+    font-weight: 700;
+  }
+
+  /* Quality floor: keyboard focus must always be visible. */
+  :focus-visible {
+    outline: 2px solid var(--color-signal-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

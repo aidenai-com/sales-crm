@@ -1,0 +1,50 @@
+import { useAuth } from '@/app/auth'
+import { Menu, MenuDivider, MenuItem, MenuLabel } from '@/components/ui/Menu'
+
+/**
+ * Who is signed in, and the way out.
+ *
+ * The role is shown because it changes what the app will let you do — a rep clicking into
+ * pipeline settings gets a 403, and seeing "rep" here is what makes that make sense rather
+ * than look like a bug.
+ */
+export function UserMenu() {
+  const { user, signOut, isAdmin } = useAuth()
+  if (!user) return null
+
+  return (
+    <Menu
+      label={`Account: ${user.name}`}
+      trigger={
+        <span className="grid size-24 place-items-center rounded-full bg-ink-navy text-caption font-bold text-paper">
+          {user.initials}
+        </span>
+      }
+    >
+      {(close) => (
+        <>
+          <MenuLabel>Signed in as</MenuLabel>
+          <div className="px-16 pb-8">
+            <p className="truncate text-body-sm font-semibold text-ink-navy">{user.name}</p>
+            <p className="truncate text-caption text-slate-gray">{user.email}</p>
+            <p className="mt-8 inline-flex items-center gap-8 rounded-full bg-pebble px-8 py-[2px] text-caption font-medium text-slate-gray">
+              {isAdmin ? 'Administrator' : 'Sales rep'}
+              {user.jobTitle && ` · ${user.jobTitle}`}
+            </p>
+          </div>
+
+          <MenuDivider />
+
+          <MenuItem
+            onSelect={() => {
+              close()
+              signOut()
+            }}
+          >
+            Sign out
+          </MenuItem>
+        </>
+      )}
+    </Menu>
+  )
+}

@@ -1,0 +1,18 @@
+{
+  // Offered when the repo is opened. Nothing here is required to build or run the app —
+  // see docs/DATABASE.md for what each one is for.
+  "recommendations": [
+    // Postgres, official. Schema tree, query editor, EXPLAIN visualiser.
+    "ms-ossdata.vscode-pgsql",
+    // Postgres, alternative. Fewer features, but its connection lives in
+    // .vscode/settings.json, so it is preconfigured for this repo.
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    // Backend.
+    "ms-python.python",
+    "charliermarsh.ruff",
+    // Frontend.
+    "bradlc.vscode-tailwindcss",
+    "dbaeumer.vscode-eslint"
+  ]
+}
