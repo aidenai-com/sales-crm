@@ -24,9 +24,13 @@ export type RouteName =
   | 'analytics'
   | 'pipeline'
   | 'accounts'
+  | 'contacts'
   | 'deals'
   | 'deal'
   | 'pipelines'
+  | 'aiUsage'
+  | 'team'
+  | 'profile'
   | 'not-found'
 
 export interface Match {
@@ -49,9 +53,13 @@ const ROUTES: Array<{ name: RouteName; pattern: string }> = [
   { name: 'analytics', pattern: '/analytics' },
   { name: 'pipeline', pattern: '/pipeline' },
   { name: 'accounts', pattern: '/accounts' },
+  { name: 'contacts', pattern: '/contacts' },
   { name: 'deals', pattern: '/deals' },
   { name: 'deal', pattern: '/deals/:dealId' },
   { name: 'pipelines', pattern: '/settings/pipelines' },
+  { name: 'aiUsage', pattern: '/settings/ai-usage' },
+  { name: 'team', pattern: '/settings/team' },
+  { name: 'profile', pattern: '/settings/profile' },
 ]
 
 /**
@@ -172,7 +180,11 @@ export const routes = {
   analytics: '/analytics',
   pipeline: '/pipeline',
   accounts: '/accounts',
+  contacts: '/contacts',
   deals: '/deals',
   deal: (dealId: string) => `/deals/${encodeURIComponent(dealId)}`,
   pipelines: '/settings/pipelines',
+  aiUsage: '/settings/ai-usage',
+  team: '/settings/team',
+  profile: '/settings/profile',
 } as const

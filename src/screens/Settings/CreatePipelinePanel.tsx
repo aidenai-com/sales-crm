@@ -26,7 +26,6 @@ export function CreatePipelinePanel({
 
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [tracksPartner, setTracksPartner] = useState(false)
   const [copyFrom, setCopyFrom] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -38,9 +37,8 @@ export function CreatePipelinePanel({
     setSaving(true)
     try {
       const created = name.trim()
-      await createTemplate(created, tracksPartner, copyFrom || undefined)
+      await createTemplate(created, copyFrom || undefined)
       setName('')
-      setTracksPartner(false)
       setCopyFrom('')
       setOpen(false)
       onCreated(created)
@@ -112,25 +110,6 @@ export function CreatePipelinePanel({
           </Select>
         </Field>
       </div>
-
-      <label className="mt-16 flex cursor-pointer items-start gap-8 rounded-lg border border-hairline bg-cloud p-16">
-        <input
-          type="checkbox"
-          checked={tracksPartner}
-          disabled={saving}
-          onChange={(e) => setTracksPartner(e.target.checked)}
-          className="mt-[2px] size-16 shrink-0 rounded-md accent-signal-blue"
-        />
-        <span>
-          <span className="block text-body-sm font-semibold text-ink-navy">
-            Deals on this pipeline involve a partner
-          </span>
-          <span className="mt-[2px] block text-caption text-slate-gray">
-            Adds a Partner field alongside the Customer on every deal, and shows it on board
-            cards (R8). Leave off for a direct sales motion.
-          </span>
-        </span>
-      </label>
 
       <div className="mt-24 flex items-center gap-8">
         <Button loading={saving} disabled={!canSave} onClick={() => void create()}>

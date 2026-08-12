@@ -31,7 +31,6 @@ export function HighPriorityDeals({ views }: { views: DealView[] }) {
               </span>
               <span className="mt-[2px] block truncate text-caption text-slate-gray">
                 {view.account.name}
-                {view.partner && ` · via ${view.partner.name}`}
                 {view.lead && ` · ${view.lead.businessUnit}`}
               </span>
             </span>

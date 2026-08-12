@@ -9,10 +9,13 @@ resolves relationships by name.
 from app.models.account import Account, Lead
 from app.models.activity import Activity
 from app.models.deal import Deal
+from app.models.assistant import AssistantUsage
+from app.models.contact import Contact, ContactRole, DealContact, DealRole
 from app.models.deliverable import Attachment, DealDeliverableCompletion
 from app.models.enums import (
     ActivityKind,
     ActivitySubjectType,
+    ContactType,
     Health,
     StageKind,
     UserRole,
@@ -26,8 +29,14 @@ __all__ = [
     "Activity",
     "ActivityKind",
     "ActivitySubjectType",
+    "AssistantUsage",
     "Attachment",
+    "Contact",
+    "ContactRole",
+    "ContactType",
     "Deal",
+    "DealContact",
+    "DealRole",
     "DealDeliverableCompletion",
     "Health",
     "Lead",

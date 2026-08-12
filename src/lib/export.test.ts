@@ -16,7 +16,8 @@ describe('dealRows', () => {
     expect(rows).toHaveLength(views.length)
     expect(Object.keys(rows[0])).toEqual([
       'Account',
-      'Partner',
+      // No Partner column. A deal has no partner field — who else is involved lives in its contacts,
+      // which the export does not carry: one spreadsheet cell cannot hold several people and their roles.
       'Opportunity',
       'Business unit',
       'Pipeline',
@@ -31,17 +32,13 @@ describe('dealRows', () => {
     ])
   })
 
-  it('carries both Partner and Account on partner-led rows (R8)', () => {
+  it('names the customer on a co-sell row, which is the only company it carries', () => {
+    // Replaces two tests that asserted a Partner column, one for partner-led rows and one for direct.
+    // Both described a field that no longer exists.
     const views = buildDealViews(snapshot())
     const row = dealRows(views).find((r) => r.Opportunity === 'Wealth Data Platform (co-sell)')!
     expect(row.Account).toBe('Bank of America')
-    expect(row.Partner).toBe('Accenture')
-  })
-
-  it('leaves Partner blank on direct deals rather than writing a placeholder', () => {
-    const views = buildDealViews(snapshot())
-    const row = dealRows(views).find((r) => r.Opportunity === 'Mainframe COBOL Refactor')!
-    expect(row.Partner).toBe('')
+    expect(row).not.toHaveProperty('Partner')
   })
 
   it('writes value as a number so Excel can sum it', () => {
@@ -51,10 +48,12 @@ describe('dealRows', () => {
   })
 
   it('exports only the views it is given — the current view, not the whole database', () => {
+    // Filtered by pipeline name rather than the old `tracksPartner` flag, which is gone: a pipeline is
+    // now just a name and its stages.
     const views = buildDealViews(snapshot())
-    const partnerOnly = views.filter((v) => v.pipeline.tracksPartner)
-    const rows = dealRows(partnerOnly)
-    expect(rows).toHaveLength(partnerOnly.length)
+    const coSellOnly = views.filter((v) => v.pipeline.name === 'Partner Co-Sell')
+    const rows = dealRows(coSellOnly)
+    expect(rows).toHaveLength(coSellOnly.length)
     expect(rows.every((r) => r.Pipeline === 'Partner Co-Sell')).toBe(true)
   })
 

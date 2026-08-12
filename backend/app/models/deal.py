@@ -13,8 +13,10 @@ class Deal(UUIDMixin, TimestampMixin, Base):
     """
     An opportunity tracked through pipeline stages, rolling up to an account.
 
-    R8: partner-led deals carry both fields on the same record. `account_id` is always the
-    customer; `partner_id` names the partner bringing the deal, and is null on direct deals.
+    `account_id` is the customer. There is no partner field: who else is involved is expressed by the
+    people on the deal, through `contact_links` — a partner-side contact attached to a deal is what
+    "there is a partner here" means. A single `partner_id` could name only one, and named a company
+    rather than somebody to call.
 
     `value` is Numeric, not float — money must not accumulate binary rounding error across
     a pipeline sum.
@@ -23,8 +25,6 @@ class Deal(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "deals"
     __table_args__ = (
         CheckConstraint("value >= 0", name="value_non_negative"),
-        # A partner cannot introduce a deal to itself.
-        CheckConstraint("partner_id IS NULL OR partner_id <> account_id", name="partner_not_customer"),
         # All values are USD. The column stays so the wire format is unchanged and a future
         # multi-currency decision has somewhere to land, but nothing may write anything else:
         # the UI, the roll-ups and the Excel export all sum values without converting, so a
@@ -41,10 +41,6 @@ class Deal(UUIDMixin, TimestampMixin, Base):
     lead_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    partner_id: Mapped[uuid.UUID | None] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-
     pipeline_template_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("pipeline_templates.id", ondelete="RESTRICT"),
@@ -68,14 +64,20 @@ class Deal(UUIDMixin, TimestampMixin, Base):
     account: Mapped["Account"] = relationship(  # noqa: F821
         back_populates="deals", foreign_keys=[account_id], lazy="joined"
     )
-    partner: Mapped["Account | None"] = relationship(  # noqa: F821
-        foreign_keys=[partner_id], lazy="joined"
-    )
     lead: Mapped["Lead | None"] = relationship(back_populates="deals", lazy="joined")  # noqa: F821
     stage: Mapped["Stage"] = relationship(back_populates="deals", lazy="joined")  # noqa: F821
     pipeline: Mapped["PipelineTemplate"] = relationship(back_populates="deals", lazy="joined")  # noqa: F821
     owner: Mapped["User"] = relationship(  # noqa: F821
         back_populates="owned_deals", foreign_keys=[owner_id], lazy="joined"
+    )
+    # Not eager: a list of fifty deals does not need everybody's contacts, and the deal page loads
+    # them deliberately. The champion gate loads them too, but only for the one deal being moved.
+    contact_links: Mapped[list["DealContact"]] = relationship(  # noqa: F821
+        back_populates="deal", cascade="all, delete-orphan"
+    )
+    #: The roles this deal tracks, whether or not anybody fills them yet.
+    role_slots: Mapped[list["DealRole"]] = relationship(  # noqa: F821
+        back_populates="deal", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

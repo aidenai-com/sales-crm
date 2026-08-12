@@ -200,7 +200,7 @@ async def test_a_deliverable_from_another_pipeline_is_rejected(
 ):
     from app.models import PipelineTemplate
 
-    other = PipelineTemplate(name="Partner", tracks_partner=True)
+    other = PipelineTemplate(name="Partner")
     session.add(other)
     await session.flush()
     other_stage = Stage(

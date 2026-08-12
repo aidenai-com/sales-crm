@@ -19,7 +19,9 @@ from app.schemas.crm import (
     LeadRead,
     LeadUpdate,
     RollUp,
+    SimilarAccount,
 )
+from app.services import account_names
 from app.services import health as health_service
 from app.services.serializers import deal_detail
 
@@ -27,12 +29,15 @@ router = APIRouter(tags=["accounts"])
 
 
 @router.get("/accounts", response_model=list[AccountRead])
-async def list_accounts(
-    db: DbSession,
-    user: CurrentUser,
-    include_partners: bool = Query(default=True),
-) -> list[Account]:
-    return await accounts_repo.list_all(db, user, include_partners=include_partners)
+async def list_accounts(db: DbSession, user: CurrentUser) -> list[Account]:
+    """
+    Every account, to every authenticated user.
+
+    The `include_partners` query parameter is gone with the column it filtered on. An account is an
+    account; whether a company is acting as a partner shows in the people attached to a deal, not in a
+    flag here.
+    """
+    return await accounts_repo.list_all(db, user)
 
 
 @router.get("/accounts/tree", response_model=list[AccountNode])
@@ -44,7 +49,7 @@ async def account_tree(db: DbSession, user: CurrentUser) -> list[AccountNode]:
     Built from three queries — accounts with leads, all deals, and one grouped
     last-activity lookup — rather than walking the tree per node.
     """
-    accounts = await accounts_repo.list_with_leads(db, user, include_partners=False)
+    accounts = await accounts_repo.list_with_leads(db, user)
     all_deals = await deals_repo.list_all(db, user)
     last_activity = await deals_repo.last_activity_map(db)
 
@@ -77,7 +82,9 @@ async def account_tree(db: DbSession, user: CurrentUser) -> list[AccountNode]:
                 LeadNode(
                     id=lead.id,
                     business_unit=lead.business_unit,
-                    owner_name=lead.owner.full_name,
+                    # A business unit has no owner; the account's is reported so the tree still names
+                    # somebody accountable at every level.
+                    owner_name=lead.account.owner.full_name,
                     deals=[deal_detail(deal, last_activity) for deal in lead_deals],
                     roll_up=RollUp(open_value=open_value, open_count=open_count, health=rolled),
                 )
@@ -101,28 +108,98 @@ async def account_tree(db: DbSession, user: CurrentUser) -> list[AccountNode]:
     return nodes
 
 
+# Declared before `/accounts/{account_id}`: FastAPI matches in order, so with this below it "similar"
+# would be parsed as an account id and rejected as a malformed UUID. Same reason `/accounts/tree` sits
+# above it.
+@router.get("/accounts/similar", response_model=list[SimilarAccount])
+async def similar_accounts(
+    db: DbSession,
+    _: CurrentUser,
+    name: str = Query(min_length=1, max_length=255),
+    limit: int = Query(default=8, ge=1, le=25),
+) -> list[SimilarAccount]:
+    """
+    Accounts that might already be the company the caller is about to create.
+
+    Powers the as-you-type warning on the create form. Read-only and deliberately cheap — a trigram
+    index and a prefix scan — because it is called every few keystrokes.
+
+    Each match carries the route that found it, so the form can explain itself rather than showing an
+    unexplained list, and can tell a hard collision apart from a resemblance worth a second look.
+    """
+    return [
+        SimilarAccount(
+            id=account.id,
+            name=account.name,
+            industry=account.industry,
+            owner_name=account.owner.full_name,
+            score=score,
+            reason=reason,
+            blocks_creation=reason in {"exact", "normalized"},
+        )
+        for account, score, reason in await accounts_repo.find_similar(db, name, limit=limit)
+    ]
+
+
 @router.get("/accounts/{account_id}", response_model=AccountRead)
 async def read_account(db: DbSession, user: CurrentUser, account_id: uuid.UUID) -> Account:
+    # No visibility check. Every account is visible to every authenticated user, so the second query
+    # this used to run — listing everything the caller could see to test membership — could only ever
+    # return true.
     account = await accounts_repo.get(db, account_id)
     if account is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
-
-    # 404 rather than 403 for an account outside the caller's scope: a 403 would confirm
-    # the record exists, which is itself information a rep is not entitled to.
-    visible = await accounts_repo.list_all(db, user)
-    if account.id not in {a.id for a in visible}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     return account
 
 
+async def _reject_duplicate_name(db: DbSession, name: str) -> None:
+    """
+    Refuses a name that is already taken, exactly or after normalization.
+
+    Checked here so the message can name the existing account, which is the only thing that lets
+    someone act on it. The partial unique index on `name_normalized` is what actually guarantees it —
+    this check can lose a race, the index cannot.
+    """
+    key = account_names.normalize(name)
+    existing = await accounts_repo.get_by_normalized(db, key)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f'"{existing.name}" is already on record and is the same company as "{name}". '
+                "Use that account instead of creating a second one."
+            ),
+        )
+
+
 @router.post("/accounts", response_model=AccountRead, status_code=status.HTTP_201_CREATED)
-async def create_account(db: DbSession, _: AdminUser, payload: AccountCreate) -> Account:
-    account = Account(**payload.model_dump())
+async def create_account(db: DbSession, user: CurrentUser, payload: AccountCreate) -> Account:
+    """
+    Any authorized user may create an account.
+
+    The creator becomes the owner. A rep may only create one assigned to themselves — otherwise "reps
+    cannot reassign" is bypassed by creating the record already assigned elsewhere — and an
+    administrator can hand it over afterwards.
+
+    Deleting an account is still admin-only: filing a company is routine, destroying one with its
+    business units, contacts and deals cascading is not.
+    """
+    permissions.require_own_assignment(user, payload.owner_id)
+    await _reject_duplicate_name(db, payload.name)
+
+    fields = payload.model_dump()
+    # Whoever creates it owns it, unless an administrator named somebody else. `require_own_assignment`
+    # above has already refused a rep trying to do the same, and reads a null as "myself".
+    fields["owner_id"] = fields.get("owner_id") or user.id
+
+    account = Account(**fields)
+    account.name_normalized = account_names.normalize(account.name)
     db.add(account)
     try:
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
+        # Reached when `_reject_duplicate_name` lost a race, or on the exact-name constraint.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with that name already exists",
@@ -143,8 +220,16 @@ async def update_account(
     fields = payload.model_dump(exclude_unset=True)
     permissions.require_no_owner_change(user, account.owner_id, fields.get("owner_id"))
 
+    # A rename has to clear the duplicate check too, or the guard on creation is bypassed by creating
+    # "Citi Holdings B" and renaming it to "Citi". Skipped when the name is unchanged, so re-saving a
+    # form does not report the account as a duplicate of itself.
+    if (new_name := fields.get("name")) and new_name != account.name:
+        await _reject_duplicate_name(db, new_name)
+
     for field, value in fields.items():
         setattr(account, field, value)
+
+    account.name_normalized = account_names.normalize(account.name)
 
     try:
         await db.commit()
@@ -185,13 +270,12 @@ async def list_leads(
 
 @router.post("/leads", response_model=LeadRead, status_code=status.HTTP_201_CREATED)
 async def create_lead(db: DbSession, user: CurrentUser, payload: LeadCreate) -> Lead:
-    if await accounts_repo.get(db, payload.account_id) is None:
+    account = await accounts_repo.get(db, payload.account_id)
+    if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
 
-    # Reps may create leads, but only ones they own — otherwise "reps cannot reassign"
-    # is bypassed by simply creating the record already assigned elsewhere.
-    permissions.require_own_assignment(user, payload.owner_id)
-
+    # No `require_own_assignment`: a business unit has no owner to assign. Its stewardship follows the
+    # account, so the guard that mattered here now lives on the account itself.
     lead = Lead(**payload.model_dump())
     db.add(lead)
     await db.commit()
@@ -209,7 +293,6 @@ async def update_lead(
 
     permissions.require_lead_owner(user, lead)
     fields = payload.model_dump(exclude_unset=True)
-    permissions.require_no_owner_change(user, lead.owner_id, fields.get("owner_id"))
 
     for field, value in fields.items():
         setattr(lead, field, value)

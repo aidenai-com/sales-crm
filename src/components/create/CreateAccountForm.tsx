@@ -1,42 +1,50 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useStore } from '@/data/store'
-import { useAuth } from '@/app/auth'
 import { useSelection } from '@/app/selection'
 import { Button } from '@/components/ui/Button'
-import { Field, Select, TextInput } from '@/components/ui/Field'
+import { Field, TextInput } from '@/components/ui/Field'
+import { AccountNameField } from './AccountNameField'
 
 /**
  * A new account: the top-level record, whose name is the customer's name (R1).
  *
- * `isPartner` is a checkbox rather than a separate "create partner" flow because one table
- * holds both — a firm can be a channel partner and a customer at once, and forcing that
- * choice up front would mean two records to keep in sync later.
+ * Two fields, and neither is a choice about what kind of company this is.
+ *
+ * There was a "this is a channel partner" checkbox. It is gone with the column behind it: an account is
+ * an account, and whether a company acted as a partner is a fact about a particular deal.
+ *
+ * There is no owner picker either. Whoever creates an account owns it — that is the answer in almost
+ * every case, a rep is not permitted to choose anyone else anyway, and an administrator can hand it
+ * over from the account itself afterwards.
+ *
+ * Duplicate detection lives in `AccountNameField`, which searches every account in the company rather
+ * than the local snapshot. That distinction is the point: the account someone is about to duplicate is
+ * usually one they have never opened.
  */
 export function CreateAccountForm({ onDone }: { onDone: () => void }) {
-  const { snapshot, createAccount } = useStore()
-  const { user } = useAuth()
+  const { createAccount } = useStore()
   const { select } = useSelection()
 
   const [name, setName] = useState('')
   const [industry, setIndustry] = useState('')
-  const [isPartner, setIsPartner] = useState(false)
-  const [ownerId, setOwnerId] = useState(user?.id ?? snapshot.people[0]?.id ?? '')
   const [saving, setSaving] = useState(false)
 
+  // Reported by the name field from the server's answer, not computed from `snapshot.accounts`: a
+  // local check only sees loaded accounts and only catches an exact repeat, which is the one spelling
+  // nobody types.
+  const [blocked, setBlocked] = useState(false)
+
   const trimmed = name.trim()
-  const duplicate = snapshot.accounts.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())
-  const canSave = trimmed.length > 0 && !duplicate && ownerId !== '' && !saving
+  const canSave = trimmed.length > 0 && !blocked && !saving
+
+  const handleBlockingChange = useCallback((next: boolean) => setBlocked(next), [])
 
   async function submit() {
     if (!canSave) return
     setSaving(true)
     try {
-      const created = await createAccount({
-        name: trimmed,
-        industry: industry.trim(),
-        isPartner,
-        ownerId,
-      })
+      // No `ownerId`: the API assigns the caller.
+      const created = await createAccount({ name: trimmed, industry: industry.trim() })
       if (created) {
         onDone()
         // Straight into the new record, which is nearly always the next thing wanted.
@@ -55,18 +63,18 @@ export function CreateAccountForm({ onDone }: { onDone: () => void }) {
         void submit()
       }}
     >
-      <Field
-        label="Account name"
-        hint={duplicate ? 'An account with that name already exists.' : 'The customer’s name (R1).'}
-      >
-        <TextInput
-          autoFocus
-          value={name}
-          disabled={saving}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Barclays"
-        />
-      </Field>
+      <AccountNameField
+        value={name}
+        onChange={setName}
+        disabled={saving}
+        onBlockingChange={handleBlockingChange}
+        onPickExisting={(match) => {
+          // Straight to the account that already exists. Refusing the name without offering a way to
+          // reach the record it clashes with leaves somebody stuck with a form they cannot submit.
+          onDone()
+          select({ type: 'account', id: match.id })
+        }}
+      />
 
       <Field label="Industry">
         <TextInput
@@ -77,34 +85,11 @@ export function CreateAccountForm({ onDone }: { onDone: () => void }) {
         />
       </Field>
 
-      <Field label="Owner">
-        <Select value={ownerId} disabled={saving} onChange={(e) => setOwnerId(e.target.value)}>
-          {snapshot.people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <label className="flex cursor-pointer items-start gap-8 rounded-lg border border-hairline bg-cloud p-16">
-        <input
-          type="checkbox"
-          checked={isPartner}
-          disabled={saving}
-          onChange={(e) => setIsPartner(e.target.checked)}
-          className="mt-[2px] size-16 shrink-0 rounded-md accent-signal-blue"
-        />
-        <span>
-          <span className="block text-body-sm font-semibold text-ink-navy">
-            This is a channel partner
-          </span>
-          <span className="mt-[2px] block text-caption text-slate-gray">
-            Partners can be named on partner-led deals. They are kept out of the account tree,
-            which answers "who are our customers".
-          </span>
-        </span>
-      </label>
+      {/* Stated rather than asked. The rule is short enough to say outright, and saying it is what
+          stops "who owns this?" being a question somebody has to go and find the answer to. */}
+      <p className="text-caption text-slate-gray">
+        You will own this account. An administrator can hand it to someone else later.
+      </p>
 
       <div className="flex items-center gap-8 pt-8">
         <Button type="submit" loading={saving} disabled={!canSave}>

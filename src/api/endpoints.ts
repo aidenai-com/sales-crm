@@ -6,14 +6,20 @@ import type {
   AnalyticsSummary,
   Attachment,
   CompletionResult,
+  Contact,
+  ContactRole,
+  ContactType,
   Deal,
   DealChecklist,
+  DealContactAssignment,
+  DealPeople,
   Id,
   Lead,
   Person,
   PipelineTemplate,
   Reminder,
   ReminderInbox,
+  SimilarAccount,
   Snapshot,
   Stage,
   StageKind,
@@ -52,6 +58,7 @@ interface StageDto {
   kind: StageKind
   position: number
   wipLimit: number | null
+  requiresChampion: boolean
   entryCriteria: string[] | null
   exitCriteria: string[] | null
   keyActivities: string[] | null
@@ -67,7 +74,6 @@ interface DeliverableDto {
 interface PipelineDto {
   id: string
   name: string
-  tracksPartner: boolean
   stages: StageDto[]
 }
 
@@ -75,7 +81,6 @@ interface AccountDto {
   id: string
   name: string
   industry: string
-  isPartner: boolean
   ownerId: string
 }
 
@@ -93,7 +98,6 @@ interface DealDto {
   createdAt: string
   accountId: string
   leadId: string | null
-  partnerId: string | null
   pipelineTemplateId: string
   stageId: string
   value: string
@@ -139,7 +143,13 @@ interface TokenDto {
 // --- Mapping -----------------------------------------------------------------
 
 function toPerson(dto: UserDto): Person {
-  return { id: dto.id, name: dto.fullName, initials: dto.initials, role: dto.jobTitle }
+  return {
+    id: dto.id,
+    name: dto.fullName,
+    initials: dto.initials,
+    role: dto.jobTitle,
+    isActive: dto.isActive,
+  }
 }
 
 export function toAuthUser(dto: UserDto): AuthUser {
@@ -162,6 +172,7 @@ function toStage(dto: StageDto): Stage {
     color: dto.color,
     kind: dto.kind,
     position: dto.position,
+    requiresChampion: dto.requiresChampion,
     wipLimit: dto.wipLimit,
     entryCriteria: dto.entryCriteria,
     exitCriteria: dto.exitCriteria,
@@ -176,7 +187,6 @@ function toPipeline(dto: PipelineDto): PipelineTemplate {
   return {
     id: dto.id,
     name: dto.name,
-    tracksPartner: dto.tracksPartner,
     // Defensive: the API orders these, but the board's correctness should not depend on it.
     stages: dto.stages.map(toStage).sort((a, b) => a.position - b.position),
   }
@@ -189,7 +199,6 @@ function toDeal(dto: DealDto): Deal {
     createdAt: dto.createdAt,
     accountId: dto.accountId,
     leadId: dto.leadId,
-    partnerId: dto.partnerId,
     pipelineTemplateId: dto.pipelineTemplateId,
     stageId: dto.stageId,
     value: Number(dto.value),
@@ -223,19 +232,24 @@ export const readApi = {
   pipelines: () => api.get<PipelineDto[]>('/pipelines').then((rows) => rows.map(toPipeline)),
   activities: (limit = 500) =>
     api.get<ActivityDto[]>(`/activities?limit=${limit}`) as Promise<Activity[]>,
+  contacts: () => api.get<Contact[]>('/contacts'),
+  contactRoles: () => api.get<ContactRole[]>('/contacts/roles'),
 }
 
 /** One call per collection, in parallel. Everything the UI needs to render any screen. */
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [people, accounts, leads, deals, pipelines, activities] = await Promise.all([
-    readApi.users(),
-    readApi.accounts(),
-    readApi.leads(),
-    readApi.deals(),
-    readApi.pipelines(),
-    readApi.activities(),
-  ])
-  return { people, accounts, leads, deals, pipelines, activities }
+  const [people, accounts, leads, deals, pipelines, activities, contacts, contactRoles] =
+    await Promise.all([
+      readApi.users(),
+      readApi.accounts(),
+      readApi.leads(),
+      readApi.deals(),
+      readApi.pipelines(),
+      readApi.activities(),
+      readApi.contacts(),
+      readApi.contactRoles(),
+    ])
+  return { people, accounts, leads, deals, pipelines, activities, contacts, contactRoles }
 }
 
 // --- Writes ------------------------------------------------------------------
@@ -246,34 +260,49 @@ export interface DealPatchBody {
   expectedCloseDate?: string
   ownerId?: Id
   stageId?: Id
-  partnerId?: Id | null
   leadId?: Id | null
 }
 
 export interface NewAccount {
   name: string
   industry: string
-  isPartner: boolean
-  ownerId: Id
+  /** Omitted, the creator becomes the owner. Only an administrator may name somebody else. */
+  ownerId?: Id
 }
 
 export interface NewLead {
   accountId: Id
   businessUnit: string
-  ownerId: Id
+  // No `ownerId`. A business unit has no owner; its stewardship follows the account.
 }
 
 export interface NewDeal {
   name: string
   accountId: Id
   leadId: Id | null
-  partnerId: Id | null
   pipelineTemplateId: Id
   stageId: Id
   value: number
   expectedCloseDate: string
   ownerId: Id
+  /**
+   * Who is involved. At least one is required by the create form and by `store.createDeal`, not by the
+   * API — see the note on `DealCreate.contacts` in the backend schema. A role may be omitted.
+   */
+  contacts: DealContactAssignment[]
+  /** The roles this deal will track, filled or not. */
+  roles: Id[]
   // No `currency`. All values are USD; the API rejects the field outright.
+}
+
+export interface NewContact {
+  accountId: Id
+  fullName: string
+  email: string
+  phone: string
+  linkedinUrl: string
+  designation: string
+  contactType: ContactType
 }
 
 export interface NewUser {
@@ -285,10 +314,60 @@ export interface NewUser {
   password: string
 }
 
+/**
+ * A team member as the Team settings screen needs them.
+ *
+ * Wider than `Person`, which is what the rest of the app uses: owner dropdowns need a name and
+ * initials and nothing else, so the snapshot carries nothing else. Email, role and active state are
+ * administration, and they live here rather than being added to `Person` so that every screen in the
+ * app does not start carrying a colleague's email address around to render a two-letter avatar.
+ */
+export interface TeamMember {
+  id: Id
+  name: string
+  initials: string
+  email: string
+  jobTitle: string
+  role: 'admin' | 'rep'
+  isActive: boolean
+}
+
+export interface UserPatch {
+  email?: string
+  fullName?: string
+  initials?: string
+  jobTitle?: string
+  role?: 'admin' | 'rep'
+  isActive?: boolean
+  /** A reset. Set by an administrator without the current password — see the API's own note. */
+  password?: string
+}
+
+function toTeamMember(dto: UserDto): TeamMember {
+  return {
+    id: dto.id,
+    name: dto.fullName,
+    initials: dto.initials,
+    email: dto.email,
+    jobTitle: dto.jobTitle,
+    role: dto.role,
+    isActive: dto.isActive,
+  }
+}
+
+/** Administration of people. Every call here is 403 for a rep except the list. */
+export const teamApi = {
+  list: () => api.get<UserDto[]>('/auth/users').then((rows) => rows.map(toTeamMember)),
+  create: (input: NewUser) => api.post<UserDto>('/auth/users', input).then(toTeamMember),
+  update: (userId: Id, patch: UserPatch) =>
+    api.patch<UserDto>(`/auth/users/${userId}`, patch).then(toTeamMember),
+}
+
 export const createApi = {
   /** Admin only; the API returns 403 for a rep. */
   user: (input: NewUser) => api.post<UserDto>('/auth/users', input).then(toAuthUser),
   account: (input: NewAccount) => api.post<AccountDto>('/accounts', input) as Promise<Account>,
+  contact: (input: NewContact) => api.post<Contact>('/contacts', input),
   lead: (input: NewLead) => api.post<LeadDto>('/leads', input) as Promise<Lead>,
   deal: (input: NewDeal) =>
     api
@@ -297,7 +376,24 @@ export const createApi = {
       .then(toDeal),
 }
 
+export interface NudgeResult {
+  dealId: Id
+  ownerId: Id
+  ownerName: string
+  reminderId: Id
+  nudgedAt: string
+  detail: string
+}
+
 export const writeApi = {
+  /**
+   * Chase a deal's owner. Administrators only.
+   *
+   * Returns a 409 when the deal is healthy or was nudged inside the cooldown — both are states
+   * the UI should report rather than treat as a failure, since the caller did nothing wrong.
+   */
+  nudgeDeal: (dealId: Id) => api.post<NudgeResult>(`/deals/${dealId}/nudge`, {}),
+
   moveDealToStage: (dealId: Id, stageId: Id) =>
     api.post<DealDto>(`/deals/${dealId}/stage`, { stageId }).then(toDeal),
 
@@ -313,7 +409,7 @@ export const writeApi = {
   updateAccount: (accountId: Id, patch: { name?: string; industry?: string; ownerId?: Id }) =>
     api.patch<AccountDto>(`/accounts/${accountId}`, patch) as Promise<Account>,
 
-  updateLead: (leadId: Id, patch: { businessUnit?: string; ownerId?: Id }) =>
+  updateLead: (leadId: Id, patch: { businessUnit?: string }) =>
     api.patch<LeadDto>(`/leads/${leadId}`, patch) as Promise<Lead>,
 
   logActivity: (input: {
@@ -334,6 +430,7 @@ export interface StagePatchBody {
   color?: string
   kind?: StageKind
   wipLimit?: number | null
+  requiresChampion?: boolean
   /**
    * The complete desired list when sent; omitted leaves the checklist alone.
    *
@@ -346,12 +443,12 @@ export interface StagePatchBody {
 }
 
 export const pipelineApi = {
-  create: (name: string, tracksPartner: boolean, copyStagesFrom?: Id) =>
+  create: (name: string, copyStagesFrom?: Id) =>
     api
-      .post<PipelineDto>('/pipelines', { name, tracksPartner, copyStagesFrom: copyStagesFrom ?? null })
+      .post<PipelineDto>('/pipelines', { name, copyStagesFrom: copyStagesFrom ?? null })
       .then(toPipeline),
 
-  update: (pipelineId: Id, patch: { name?: string; tracksPartner?: boolean }) =>
+  update: (pipelineId: Id, patch: { name?: string }) =>
     api.patch<PipelineDto>(`/pipelines/${pipelineId}`, patch).then(toPipeline),
 
   duplicate: (pipelineId: Id, name: string) =>
@@ -487,7 +584,6 @@ export const reminderApi = {
 export interface AnalyticsQuery {
   pipelineId?: Id | null
   ownerId?: Id | null
-  partnerId?: Id | null
   closeFrom?: string | null
   closeTo?: string | null
 }
@@ -502,7 +598,6 @@ export interface AnalyticsQuery {
 const ANALYTICS_PARAMS: Record<keyof AnalyticsQuery, string> = {
   pipelineId: 'pipeline_id',
   ownerId: 'owner_id',
-  partnerId: 'partner_id',
   closeFrom: 'close_from',
   closeTo: 'close_to',
 }
@@ -516,4 +611,71 @@ export const analyticsApi = {
     const suffix = params.toString()
     return api.get<AnalyticsSummary>(`/analytics/summary${suffix ? `?${suffix}` : ''}`)
   },
+}
+
+// --- Contacts ----------------------------------------------------------------
+
+export interface ContactPatchBody {
+  fullName?: string
+  email?: string
+  phone?: string
+  linkedinUrl?: string
+  designation?: string
+  contactType?: ContactType
+  // No `accountId`. Moving a contact between companies is not an edit — their designation and every
+  // deal they are on belong to the old account.
+}
+
+export const contactApi = {
+  /**
+   * Accounts that might already be the company someone is typing.
+   *
+   * Called on a debounce while the name field changes, so it is deliberately the cheapest read in the
+   * app. `blocksCreation` marks a match the API will refuse outright, as opposed to one worth a look.
+   */
+  similarAccounts: (name: string, signal?: AbortSignal) =>
+    api.get<SimilarAccount[]>(`/accounts/similar?name=${encodeURIComponent(name)}`, signal),
+
+  update: (contactId: Id, patch: ContactPatchBody) =>
+    api.patch<Contact>(`/contacts/${contactId}`, patch),
+
+  /** Admin only. Strips this person from every deal they were on, so it is not a rep's call. */
+  remove: (contactId: Id) => api.delete<{ detail: string }>(`/contacts/${contactId}`),
+
+  /**
+   * The roles a deal tracks and the people on it.
+   *
+   * Every write below returns the whole picture rather than the row that changed. The panel renders
+   * roles and contacts together, and the states worth seeing are the mismatches — an unfilled role, an
+   * unmapped person — so a fragment would leave the client re-fetching or guessing.
+   */
+  forDeal: (dealId: Id) => api.get<DealPeople>(`/deals/${dealId}/people`),
+
+  addToDeal: (dealId: Id, assignment: DealContactAssignment) =>
+    api.post<DealPeople>(`/deals/${dealId}/contacts`, assignment),
+
+  /** Maps, remaps, or unmaps somebody. A null role unmaps without detaching them from the deal. */
+  remapOnDeal: (dealId: Id, linkId: Id, roleId: Id | null) =>
+    api.patch<DealPeople>(`/deals/${dealId}/contacts/${linkId}`, { roleId }),
+
+  /** Detaches one person. The contact itself is untouched and the role stays tracked. */
+  removeFromDeal: (dealId: Id, linkId: Id) =>
+    api.delete<DealPeople>(`/deals/${dealId}/contacts/${linkId}`),
+
+  /** Starts tracking a role on this deal, with or without anybody in it. */
+  addRoleToDeal: (dealId: Id, roleId: Id) =>
+    api.post<DealPeople>(`/deals/${dealId}/roles`, { roleId }),
+
+  /** Stops tracking a role. Anybody who held it becomes unmapped rather than detached. */
+  removeRoleFromDeal: (dealId: Id, linkId: Id) =>
+    api.delete<DealPeople>(`/deals/${dealId}/roles/${linkId}`),
+}
+
+export const contactRoleApi = {
+  /** Admin only: which roles exist is a company-wide configuration decision, like a pipeline's stages. */
+  create: (name: string) => api.post<ContactRole>('/contacts/roles', { name }),
+  update: (roleId: Id, patch: { name?: string; position?: number }) =>
+    api.patch<ContactRole>(`/contacts/roles/${roleId}`, patch),
+  /** Refused with 409 if the role is built in, or still assigned on any deal. */
+  remove: (roleId: Id) => api.delete<{ detail: string }>(`/contacts/roles/${roleId}`),
 }

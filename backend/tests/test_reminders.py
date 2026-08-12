@@ -255,13 +255,23 @@ async def test_a_lead_with_no_open_deals_is_not_nudged(
     assert response.json()["staleLeads"] == []
 
 
-async def test_a_rep_is_not_nudged_about_another_reps_lead(
+async def test_a_quiet_business_unit_is_nudged_to_the_account_owner(
     client: AsyncClient, as_priya, session, data
 ):
+    """
+    Business units no longer have an owner, so a quiet one is chased through the account.
+
+    This test previously asserted that Priya saw nothing about Marcus Unit. She now sees it — every
+    business unit is visible to every rep — but the nudge names **Marcus**, because he owns Shared Bank.
+    The visibility widened; the accountability did not move to whoever happened to be looking.
+    """
     await _age_lead(session, data["marcus_lead"], days=30)
 
     response = await client.get(f"{API}/reminders/inbox", headers=as_priya)
-    assert [item["businessUnit"] for item in response.json()["staleLeads"]] == []
+    stale = {item["businessUnit"]: item for item in response.json()["staleLeads"]}
+
+    assert "Marcus Unit" in stale
+    assert stale["Marcus Unit"]["ownerName"] == data["marcus"].full_name
 
 
 # --- The sweep ----------------------------------------------------------------
@@ -369,11 +379,21 @@ async def test_a_failed_send_is_retried_next_pass(session, data, monkeypatch):
     assert await reminders_service.run_sweep(session) == 1
 
 
-async def test_the_default_notifier_logs_when_smtp_is_unset():
+async def test_the_default_notifier_logs_when_smtp_is_unset(monkeypatch):
     """
     A fresh checkout has no credentials and must still work. This is the contract that lets
     real ones be dropped into `.env` later without a code change.
+
+    `smtp_host` is patched to blank rather than read from the environment. This test used to assert
+    against the developer's own `.env`, so it passed on a machine with no mail configured and failed
+    the moment Mailpit was added — reporting a broken contract when the only thing that had changed
+    was local config. The selection rule is what is under test; where the host comes from is not.
     """
+    monkeypatch.setattr(notifications.settings, "smtp_host", "")
     notifications.get_notifier.cache_clear()
-    assert isinstance(notifications.get_notifier(), notifications.LoggingNotifier)
-    notifications.get_notifier.cache_clear()
+    try:
+        assert isinstance(notifications.get_notifier(), notifications.LoggingNotifier)
+    finally:
+        # Cleared on the way out as well as in: the cache would otherwise hand the blank-host
+        # notifier to every later test in the session.
+        notifications.get_notifier.cache_clear()

@@ -5,6 +5,7 @@ import { Drawer } from '@/components/ui/Drawer'
 import { DealDrawerBody } from './DealDrawerBody'
 import { LeadDrawerBody } from './LeadDrawerBody'
 import { AccountDrawerBody } from './AccountDrawerBody'
+import { ContactDrawerBody } from './ContactDrawerBody'
 
 /**
  * Single drawer host. It resolves whatever is selected to the right body, so every
@@ -33,12 +34,22 @@ export function RecordDrawer() {
         leadId: lead.id,
       }
     }
+    if (selection.type === 'contact') {
+      const contact = snapshot.contacts.find((c) => c.id === selection.id)
+      if (!contact) return null
+      return {
+        kind: 'contact' as const,
+        title: contact.fullName,
+        eyebrow: contact.accountName,
+        contactId: contact.id,
+      }
+    }
     const account = snapshot.accounts.find((a) => a.id === selection.id)
     if (!account) return null
     return {
       kind: 'account' as const,
       title: account.name,
-      eyebrow: account.isPartner ? 'Partner' : 'Account',
+      eyebrow: 'Account',
       accountId: account.id,
     }
   }, [selection, snapshot])
@@ -50,6 +61,7 @@ export function RecordDrawer() {
       {resolved.kind === 'deal' && <DealDrawerBody dealId={resolved.dealId} />}
       {resolved.kind === 'lead' && <LeadDrawerBody leadId={resolved.leadId} />}
       {resolved.kind === 'account' && <AccountDrawerBody accountId={resolved.accountId} />}
+      {resolved.kind === 'contact' && <ContactDrawerBody contactId={resolved.contactId} />}
     </Drawer>
   )
 }

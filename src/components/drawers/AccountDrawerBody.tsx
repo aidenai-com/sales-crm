@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { pendingKey, useStore } from '@/data/store'
+import { assignableOwners } from '@/lib/people'
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit'
+import { useAuth } from '@/app/auth'
 import { useSelection } from '@/app/selection'
 import { useCreation } from '@/app/creation'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +15,7 @@ import { ActivityTimeline } from './ActivityTimeline'
 
 export function AccountDrawerBody({ accountId }: { accountId: string }) {
   const { snapshot, updateAccount, isPending } = useStore()
+  const { isAdmin } = useAuth()
   const { select } = useSelection()
   const { openCreate } = useCreation()
 
@@ -68,18 +71,27 @@ export function AccountDrawerBody({ accountId }: { accountId: string }) {
         </Field>
       </div>
 
+      {/* Reassignment is an administrator's call — `require_no_owner_change` refuses anyone else. The
+          select used to be shown to everybody, so a rep changing it got a 403 for using a control the
+          app had offered them. Reps see who owns it instead, which is the part they actually need. */}
       <Field label="Owner">
-        <Select
-          value={account.ownerId}
-          disabled={saving}
-          onChange={(e) => void updateAccount(account.id, { ownerId: e.target.value })}
-        >
-          {snapshot.people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.name}
-            </option>
-          ))}
-        </Select>
+        {isAdmin ? (
+          <Select
+            value={account.ownerId}
+            disabled={saving}
+            onChange={(e) => void updateAccount(account.id, { ownerId: e.target.value })}
+          >
+            {assignableOwners(snapshot.people, account.ownerId).map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <p className="px-12 py-8 text-body-sm text-slate-gray">
+            {snapshot.people.find((person) => person.id === account.ownerId)?.name ?? 'Unassigned'}
+          </p>
+        )}
       </Field>
 
       <div>

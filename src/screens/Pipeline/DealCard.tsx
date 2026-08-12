@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn'
 import { MoveToStageMenu } from './MoveToStageMenu'
 
 /**
- * Deal card: customer, opportunity, value, owner, status (spec 4.2). On the partner
+ * Deal card: customer, opportunity, value, owner, status (spec 4.2). On the co-sell
  * pipeline it also shows the Partner alongside the Customer (R8).
  *
  * Three ways to act on a card, because dragging alone is not enough on a wide board:
@@ -34,7 +34,6 @@ export function DealCard({
     disabled: !canMove,
   })
 
-  const isPartnerDeal = view.pipeline.tracksPartner
 
   return (
     <div
@@ -109,12 +108,6 @@ export function DealCard({
             />
           </div>
         </div>
-
-        {isPartnerDeal && (
-          <p className="mt-8 truncate text-caption text-slate-gray">
-            <span className="text-mist-gray">Partner</span> {view.partner?.name ?? 'Not set'}
-          </p>
-        )}
 
         <div className="mt-16 flex items-end justify-between gap-8">
           <span className="text-body-sm font-bold text-ink-navy tabular-nums">

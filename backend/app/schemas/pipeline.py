@@ -40,6 +40,9 @@ class StageRead(ORMModel):
     kind: StageKind
     position: int
     wip_limit: int | None
+    #: Whether a deal needs a complete champion before it can enter this stage. Enforced, unlike the
+    #: criteria below.
+    requires_champion: bool
     # Methodology reference content (spec 6.2). Returned so the client can render the
     # read-only stage playbook; never enforced.
     entry_criteria: list[str] | None
@@ -56,6 +59,7 @@ class StageCreate(PayloadModel):
     color: str = Field(default="#4a90e2", pattern=HEX_COLOR)
     kind: StageKind = StageKind.OPEN
     wip_limit: int | None = Field(default=None, ge=0)
+    requires_champion: bool = False
     entry_criteria: list[str] | None = None
     exit_criteria: list[str] | None = None
     key_activities: list[str] | None = None
@@ -70,6 +74,7 @@ class StageUpdate(PayloadModel):
     color: str | None = Field(default=None, pattern=HEX_COLOR)
     kind: StageKind | None = None
     wip_limit: int | None = Field(default=None, ge=0)
+    requires_champion: bool | None = None
     entry_criteria: list[str] | None = None
     exit_criteria: list[str] | None = None
     key_activities: list[str] | None = None
@@ -91,21 +96,17 @@ class StageReassign(PayloadModel):
 class PipelineTemplateRead(ORMModel):
     id: uuid.UUID
     name: str
-    #: Deals on this pipeline carry a Partner alongside the Customer (R8).
-    tracks_partner: bool
     stages: list[StageRead]
 
 
 class PipelineTemplateCreate(PayloadModel):
     name: str = Field(min_length=1, max_length=120)
-    tracks_partner: bool = False
     #: Copy the stages of an existing template instead of starting from the defaults.
     copy_stages_from: uuid.UUID | None = None
 
 
 class PipelineTemplateUpdate(PayloadModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    tracks_partner: bool | None = None
 
 
 class PipelineTemplateDuplicate(PayloadModel):

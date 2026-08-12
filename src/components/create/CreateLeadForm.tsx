@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import type { Id } from '@/types/domain'
 import { useStore } from '@/data/store'
-import { useAuth } from '@/app/auth'
 import { useSelection } from '@/app/selection'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, TextInput } from '@/components/ui/Field'
 
 /**
- * A new lead: a business unit under an account, with its own owner (R2).
+ * A new lead: a business unit under an account.
+ *
+ * No owner field. Only accounts and deals have an owner — a business unit's stewardship follows its
+ * account, so there is nothing to choose here and offering a choice would imply otherwise.
  *
  * The account is a field rather than fixed even when opened from an account, because
  * picking the wrong starting point is easy and re-opening the form to fix it is not the
@@ -21,14 +23,13 @@ export function CreateLeadForm({
   onDone: () => void
 }) {
   const { snapshot, createLead } = useStore()
-  const { user } = useAuth()
   const { select } = useSelection()
 
-  const customers = snapshot.accounts.filter((a) => !a.isPartner)
+  // Every account. A business unit can sit under any company we deal with.
+  const customers = snapshot.accounts
 
   const [accountId, setAccountId] = useState(defaultAccountId ?? customers[0]?.id ?? '')
   const [businessUnit, setBusinessUnit] = useState('')
-  const [ownerId, setOwnerId] = useState(user?.id ?? snapshot.people[0]?.id ?? '')
   const [saving, setSaving] = useState(false)
 
   const trimmed = businessUnit.trim()
@@ -41,7 +42,7 @@ export function CreateLeadForm({
     if (!canSave) return
     setSaving(true)
     try {
-      const created = await createLead({ accountId, businessUnit: trimmed, ownerId })
+      const created = await createLead({ accountId, businessUnit: trimmed })
       if (created) {
         onDone()
         select({ type: 'lead', id: created.id })
@@ -97,15 +98,7 @@ export function CreateLeadForm({
         />
       </Field>
 
-      <Field label="Owner">
-        <Select value={ownerId} disabled={saving} onChange={(e) => setOwnerId(e.target.value)}>
-          {snapshot.people.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      {/* No owner field: see the note above the component. */}
 
       <div className="flex items-center gap-8 pt-8">
         <Button type="submit" loading={saving} disabled={!canSave}>

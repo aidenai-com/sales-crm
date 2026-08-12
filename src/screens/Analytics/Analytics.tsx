@@ -8,13 +8,20 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { ExportButton } from '@/components/ui/ExportButton'
 import { ChartEmpty, ChartPanel, DataTable, StatTile } from '@/components/viz/primitives'
-import { HorizontalBars, type BarRow } from '@/components/viz/HorizontalBars'
 import { ColumnChart, type Column } from '@/components/viz/ColumnChart'
+import {
+  HeroFigure,
+  ProbabilityLegend,
+  RankedRows,
+  StageLadder,
+  type LadderStage,
+  type RankedRow,
+} from '@/components/viz/pipeline'
 import { AnalyticsFilters } from './AnalyticsFilters'
 
 /**
  * The reporting surface. "Visuals to see overall pipeline, filterable by things like
- * individuals and partners" — the feedback this screen answers.
+ * individuals" — the feedback this screen answers.
  *
  * It is a separate screen rather than more sections on the Dashboard because spec.md §4.1
  * calls the Dashboard "an action surface, not a reporting surface", and it had drifted into
@@ -30,7 +37,6 @@ import { AnalyticsFilters } from './AnalyticsFilters'
 const PARAMS = {
   pipelineId: 'pipeline',
   ownerId: 'owner',
-  partnerId: 'partner',
   closeFrom: 'from',
   closeTo: 'to',
 } as const
@@ -39,7 +45,6 @@ function queryFromUrl(search: URLSearchParams): AnalyticsQuery {
   return {
     pipelineId: search.get(PARAMS.pipelineId),
     ownerId: search.get(PARAMS.ownerId),
-    partnerId: search.get(PARAMS.partnerId),
     closeFrom: search.get(PARAMS.closeFrom),
     closeTo: search.get(PARAMS.closeTo),
   }
@@ -90,7 +95,6 @@ export function Analytics() {
             sheets={[
               { name: 'Funnel', rows: summary.funnel.map(funnelExportRow) },
               { name: 'By individual', rows: summary.byOwner.map(ownerExportRow) },
-              { name: 'By partner', rows: summary.byPartner.map(partnerExportRow) },
               { name: 'Forecast', rows: summary.forecast.map(forecastExportRow) },
             ]}
             filenameBase="analytics"
@@ -130,11 +134,16 @@ export function Analytics() {
         >
           <Totals summary={summary} />
 
-          <div className="mt-24 grid gap-24 lg:grid-cols-2">
-            <Funnel summary={summary} />
+          {/* Reading order, not a grid of equals. The ladder is the subject, so it gets the
+              full width first; the forecast answers "when", which needs horizontal room for
+              months to run left to right; the two rankings answer "who", and only those two
+              are genuinely parallel questions, so only those two sit side by side. */}
+          <div className="mt-24 space-y-24">
+            <StageFunnel summary={summary} />
             <Forecast summary={summary} />
-            <ByOwner summary={summary} />
-            <ByPartner summary={summary} />
+            <div className="grid gap-24 lg:grid-cols-2">
+              <ByOwner summary={summary} />
+            </div>
           </div>
         </div>
       )}
@@ -160,17 +169,17 @@ function Totals({ summary }: { summary: Summary }) {
 
   return (
     <div className="mt-24 grid gap-16 sm:grid-cols-2 lg:grid-cols-4">
-      <StatTile
+      {/* Open pipeline and weighted were two tiles of equal size, which asked the reader to
+          weigh them equally. They are not equal and they are not independent: weighted is a
+          share of open. One figure with the share drawn inside it says both, and says which
+          one the page is about. */}
+      <HeroFigure
         label="Open pipeline"
         value={fullMoney(summary.totalOpenValue)}
-        hint={`${count(outcomes.openCount)} open deals`}
-        emphasis
-      />
-      <StatTile
-        label="Weighted"
-        value={fullMoney(summary.totalWeightedValue)}
-        hint="Open value × stage probability"
-        emphasis
+        openValue={summary.totalOpenValue}
+        weightedValue={summary.totalWeightedValue}
+        weightedDisplay={fullMoney(summary.totalWeightedValue)}
+        meta={`Across ${count(outcomes.openCount)} open deals.`}
       />
       <StatTile
         label="Win rate"
@@ -246,31 +255,25 @@ function OutcomeRow({ label, fill, value, n }: { label: string; fill: string; va
  * see, so both bars take the series slots and the stage's own colour appears as a chip
  * beside its name, matching how the board and the stage rail identify it.
  */
-function Funnel({ summary }: { summary: Summary }) {
-  const rows: BarRow[] = summary.funnel.map((slice) => ({
+function StageFunnel({ summary }: { summary: Summary }) {
+  const stages: LadderStage[] = summary.funnel.map((slice) => ({
     key: slice.stageId,
-    label: slice.stageName,
-    primaryLabel: compactMoney(slice.value),
-    meta: `${count(slice.count)} deal${slice.count === 1 ? '' : 's'} · ${slice.probability}% probability`,
-    values: [
-      { slot: 1, label: 'Open value', value: slice.value, display: fullMoney(slice.value) },
-      {
-        slot: 2,
-        label: 'Weighted',
-        value: slice.weightedValue,
-        display: fullMoney(slice.weightedValue),
-      },
-    ],
+    name: slice.stageName,
+    color: slice.color,
+    probability: slice.probability,
+    dealCount: slice.count,
+    openValue: slice.value,
+    weightedValue: slice.weightedValue,
   }))
 
   return (
     <ChartPanel
-      title="Pipeline by stage"
-      subtitle="Every stage of the matching pipelines, including the empty ones."
-      series={[
-        { slot: 1, label: 'Open value' },
-        { slot: 2, label: 'Weighted' },
-      ]}
+      title="The pipeline, stage by stage"
+      // The caveat belongs on the chart, not in a footnote. Every deal here is standing in the
+      // pipeline right now, so the narrowing between stages is the pipeline's present shape —
+      // not the rate at which deals historically moved through it.
+      subtitle="In pipeline order, empty stages included. The figures between stages compare deal counts as they stand today; they are not historical conversion rates."
+      legend={<ProbabilityLegend />}
       table={
         <DataTable
           columns={['Stage', 'Deals', 'Open value', 'Weighted']}
@@ -286,10 +289,10 @@ function Funnel({ summary }: { summary: Summary }) {
         />
       }
     >
-      {rows.length === 0 ? (
+      {stages.length === 0 ? (
         <ChartEmpty message="No pipeline matches these filters." />
       ) : (
-        <HorizontalBars rows={rows} valueLabel="Open value against weighted" />
+        <StageLadder stages={stages} />
       )}
     </ChartPanel>
   )
@@ -320,12 +323,9 @@ function Forecast({ summary }: { summary: Summary }) {
 
   return (
     <ChartPanel
-      title="Forecast by close month"
-      subtitle="Open deals only, by the month they are expected to close."
-      series={[
-        { slot: 1, label: 'Open value' },
-        { slot: 2, label: 'Weighted' },
-      ]}
+      title="What lands, and when"
+      subtitle="Open deals only, by the month they are expected to close. Closed business is excluded — a forecast containing deals that already landed is a report of the past."
+      legend={<ProbabilityLegend />}
       table={
         <DataTable
           columns={['Month', 'Deals', 'Open value', 'Weighted']}
@@ -344,7 +344,11 @@ function Forecast({ summary }: { summary: Summary }) {
       {columns.length === 0 ? (
         <ChartEmpty message="No open deals close inside this window." />
       ) : (
-        <ColumnChart columns={columns} valueLabel="Open value against weighted" />
+        <ColumnChart
+          columns={columns}
+          valueLabel="Open value, with the weighted portion"
+          mode="nested"
+        />
       )}
     </ChartPanel>
   )
@@ -352,25 +356,20 @@ function Forecast({ summary }: { summary: Summary }) {
 
 /** The "filterable by individuals" half of the feedback, as a breakdown rather than a filter. */
 function ByOwner({ summary }: { summary: Summary }) {
-  const rows: BarRow[] = summary.byOwner.map((slice) => ({
+  const rows: RankedRow[] = summary.byOwner.map((slice) => ({
     key: slice.ownerId,
     label: slice.ownerName,
-    primaryLabel: compactMoney(slice.openValue),
+    primary: slice.openValue,
+    primaryDisplay: compactMoney(slice.openValue),
+    secondary: slice.wonValue,
+    secondaryDisplay: compactMoney(slice.wonValue),
     meta: `${count(slice.openCount)} open · ${count(slice.wonCount)} won`,
-    values: [
-      { slot: 1, label: 'Open value', value: slice.openValue, display: fullMoney(slice.openValue) },
-      { slot: 2, label: 'Won value', value: slice.wonValue, display: fullMoney(slice.wonValue) },
-    ],
   }))
 
   return (
     <ChartPanel
       title="By individual"
-      subtitle="Open pipeline against closed-won, largest first."
-      series={[
-        { slot: 1, label: 'Open value' },
-        { slot: 2, label: 'Won value' },
-      ]}
+      subtitle="Open pipeline against business already closed, largest first."
       table={
         <DataTable
           columns={['Individual', 'Open', 'Open value', 'Won', 'Won value']}
@@ -390,63 +389,12 @@ function ByOwner({ summary }: { summary: Summary }) {
       {rows.length === 0 ? (
         <ChartEmpty message="No deals match these filters." />
       ) : (
-        <HorizontalBars rows={rows} valueLabel="Open against won" />
+        <RankedRows rows={rows} primaryLabel="Open pipeline" secondaryLabel="Closed won" />
       )}
     </ChartPanel>
   )
 }
 
-/**
- * Value sourced through each partner, with Direct last.
- *
- * Direct is on the chart deliberately: partner contribution only means something next to the
- * business that arrived without one. It sorts last regardless of size so the partner rows
- * read as the subject and Direct as the baseline.
- */
-function ByPartner({ summary }: { summary: Summary }) {
-  const rows: BarRow[] = summary.byPartner.map((slice) => ({
-    key: slice.partnerId ?? 'direct',
-    label: slice.partnerName,
-    primaryLabel: compactMoney(slice.openValue),
-    meta: `${count(slice.openCount)} open · ${count(slice.wonCount)} won`,
-    values: [
-      { slot: 1, label: 'Open value', value: slice.openValue, display: fullMoney(slice.openValue) },
-      { slot: 2, label: 'Won value', value: slice.wonValue, display: fullMoney(slice.wonValue) },
-    ],
-  }))
-
-  return (
-    <ChartPanel
-      title="By partner"
-      subtitle="Deals sourced through each partner, with direct business as the baseline."
-      series={[
-        { slot: 1, label: 'Open value' },
-        { slot: 2, label: 'Won value' },
-      ]}
-      table={
-        <DataTable
-          columns={['Source', 'Open', 'Open value', 'Won', 'Won value']}
-          rows={summary.byPartner.map((slice) => ({
-            key: slice.partnerId ?? 'direct',
-            cells: [
-              slice.partnerName,
-              count(slice.openCount),
-              fullMoney(slice.openValue),
-              count(slice.wonCount),
-              fullMoney(slice.wonValue),
-            ],
-          }))}
-        />
-      }
-    >
-      {rows.length === 0 ? (
-        <ChartEmpty message="No deals match these filters." />
-      ) : (
-        <HorizontalBars rows={rows} valueLabel="Open against won" />
-      )}
-    </ChartPanel>
-  )
-}
 
 // --- Export rows -------------------------------------------------------------
 // Headers name the unit, so a workbook opened months later needs no legend.
@@ -468,13 +416,6 @@ const ownerExportRow = (slice: Summary['byOwner'][number]) => ({
   'Won value (USD)': slice.wonValue,
 })
 
-const partnerExportRow = (slice: Summary['byPartner'][number]) => ({
-  Source: slice.partnerName,
-  'Open deals': slice.openCount,
-  'Open value (USD)': slice.openValue,
-  'Won deals': slice.wonCount,
-  'Won value (USD)': slice.wonValue,
-})
 
 const forecastExportRow = (slice: Summary['forecast'][number]) => ({
   Month: slice.label,
@@ -489,15 +430,20 @@ const forecastExportRow = (slice: Summary['forecast'][number]) => ({
 function AnalyticsSkeleton({ bare = false }: { bare?: boolean }) {
   const body = (
     <>
+      {/* Mirrors the real layout's rhythm — one wide figure, two tiles, then the ladder at
+          full width — so nothing jumps when the numbers arrive. */}
       <div className="mt-24 grid gap-16 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-[108px] rounded-2xl" />
-        ))}
+        <Skeleton className="h-[168px] rounded-3xl sm:col-span-2" />
+        <Skeleton className="h-[168px] rounded-2xl" />
+        <Skeleton className="h-[168px] rounded-2xl" />
       </div>
-      <div className="mt-24 grid gap-24 lg:grid-cols-2">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-[320px] rounded-3xl" />
-        ))}
+      <div className="mt-24 space-y-24">
+        <Skeleton className="h-[420px] rounded-3xl" />
+        <Skeleton className="h-[320px] rounded-3xl" />
+        <div className="grid gap-24 lg:grid-cols-2">
+          <Skeleton className="h-[320px] rounded-3xl" />
+          <Skeleton className="h-[320px] rounded-3xl" />
+        </div>
       </div>
     </>
   )

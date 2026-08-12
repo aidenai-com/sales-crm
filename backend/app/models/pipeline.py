@@ -22,20 +22,17 @@ class PipelineTemplate(UUIDMixin, TimestampMixin, Base):
     A pipeline defined as data, not code (spec 6.2).
 
     R6 requires two pipelines with different stages, and R7 an onboarding stage on the
-    partner one. Because templates are rows, adding a pipeline needs no migration.
+    co-sell one. Because templates are rows, adding a pipeline needs no migration.
 
-    There is deliberately no `type` enum. It used to be direct/partner, which capped the
-    system at exactly those two and contradicted spec 6.2's "extensible". It was also only
-    ever read to answer one question — should this pipeline show a Partner field alongside
-    the Customer — so that question is now its own field and the name is free text.
+    There is deliberately no `type` enum. It used to be direct/partner, which capped the system at
+    exactly those two and contradicted spec 6.2's "extensible". It was replaced by `tracks_partner`,
+    which existed to answer one question — should this pipeline show a Partner field — and that field is
+    gone too. A pipeline is now just a name and an ordered set of stages.
     """
 
     __tablename__ = "pipeline_templates"
 
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-
-    #: Whether deals on this pipeline carry a Partner alongside the Customer (R8).
-    tracks_partner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     stages: Mapped[list["Stage"]] = relationship(
         back_populates="pipeline",
@@ -97,6 +94,16 @@ class Stage(UUIDMixin, TimestampMixin, Base):
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     wip_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: Whether a deal needs an identified champion — with email, phone and LinkedIn — before it can
+    #: enter this stage. Enforced in `pipeline_service.move_deal_to_stage`.
+    #:
+    #: Per stage rather than one global rule, so it can be tuned per pipeline without a migration.
+    #: Seeded on for every open stage except the first: requiring a champion in order to *leave*
+    #: qualification gates the stage where a rep legitimately does not have one yet.
+    requires_champion: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     entry_criteria: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     exit_criteria: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

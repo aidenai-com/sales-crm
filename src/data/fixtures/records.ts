@@ -15,40 +15,40 @@ function daysAgo(days: number): string {
 }
 
 export const people: Person[] = [
-  { id: 'per-1', name: 'Priya Raghavan', initials: 'PR', role: 'Enterprise AE' },
-  { id: 'per-2', name: 'Marcus Feld', initials: 'MF', role: 'Enterprise AE' },
-  { id: 'per-3', name: 'Dana Okonkwo', initials: 'DO', role: 'Partner Manager' },
-  { id: 'per-4', name: 'Tomas Lindqvist', initials: 'TL', role: 'Solutions Architect' },
-  { id: 'per-5', name: 'Aisha Bennett', initials: 'AB', role: 'Regional Director' },
+  { id: 'per-1', name: 'Priya Raghavan', initials: 'PR', role: 'Enterprise AE', isActive: true },
+  { id: 'per-2', name: 'Marcus Feld', initials: 'MF', role: 'Enterprise AE', isActive: true },
+  { id: 'per-3', name: 'Dana Okonkwo', initials: 'DO', role: 'Partner Manager', isActive: true },
+  { id: 'per-4', name: 'Tomas Lindqvist', initials: 'TL', role: 'Solutions Architect', isActive: true },
+  { id: 'per-5', name: 'Aisha Bennett', initials: 'AB', role: 'Regional Director', isActive: true },
 ]
 
 export const accounts: Account[] = [
-  { id: 'acc-jpmc', name: 'JPMorgan Chase', industry: 'Banking', ownerId: 'per-1', isPartner: false },
-  { id: 'acc-bofa', name: 'Bank of America', industry: 'Banking', ownerId: 'per-2', isPartner: false },
-  { id: 'acc-citi', name: 'Citigroup', industry: 'Banking', ownerId: 'per-1', isPartner: false },
-  { id: 'acc-wells', name: 'Wells Fargo', industry: 'Banking', ownerId: 'per-2', isPartner: false },
-  { id: 'acc-hsbc', name: 'HSBC', industry: 'Banking', ownerId: 'per-5', isPartner: false },
-  { id: 'acc-pru', name: 'Prudential Financial', industry: 'Insurance', ownerId: 'per-1', isPartner: false },
-  { id: 'acc-aetna', name: 'Aetna', industry: 'Health Insurance', ownerId: 'per-5', isPartner: false },
-  { id: 'acc-accenture', name: 'Accenture', industry: 'Systems Integrator', ownerId: 'per-3', isPartner: true },
-  { id: 'acc-deloitte', name: 'Deloitte', industry: 'Systems Integrator', ownerId: 'per-3', isPartner: true },
-  { id: 'acc-ntt', name: 'NTT Data', industry: 'Systems Integrator', ownerId: 'per-3', isPartner: true },
-  { id: 'acc-virtusa', name: 'Virtusa', industry: 'Systems Integrator', ownerId: 'per-3', isPartner: true },
+  { id: 'acc-jpmc', name: 'JPMorgan Chase', industry: 'Banking', ownerId: 'per-1' },
+  { id: 'acc-bofa', name: 'Bank of America', industry: 'Banking', ownerId: 'per-2' },
+  { id: 'acc-citi', name: 'Citigroup', industry: 'Banking', ownerId: 'per-1' },
+  { id: 'acc-wells', name: 'Wells Fargo', industry: 'Banking', ownerId: 'per-2' },
+  { id: 'acc-hsbc', name: 'HSBC', industry: 'Banking', ownerId: 'per-5' },
+  { id: 'acc-pru', name: 'Prudential Financial', industry: 'Insurance', ownerId: 'per-1' },
+  { id: 'acc-aetna', name: 'Aetna', industry: 'Health Insurance', ownerId: 'per-5' },
+  { id: 'acc-accenture', name: 'Accenture', industry: 'Systems Integrator', ownerId: 'per-3' },
+  { id: 'acc-deloitte', name: 'Deloitte', industry: 'Systems Integrator', ownerId: 'per-3' },
+  { id: 'acc-ntt', name: 'NTT Data', industry: 'Systems Integrator', ownerId: 'per-3' },
+  { id: 'acc-virtusa', name: 'Virtusa', industry: 'Systems Integrator', ownerId: 'per-3' },
 ]
 
 export const leads: Lead[] = [
-  { id: 'lead-jpmc-1', accountId: 'acc-jpmc', businessUnit: 'Corporate & Investment Bank', ownerId: 'per-1' },
-  { id: 'lead-jpmc-2', accountId: 'acc-jpmc', businessUnit: 'Consumer Banking Technology', ownerId: 'per-2' },
-  { id: 'lead-jpmc-3', accountId: 'acc-jpmc', businessUnit: 'Risk & Compliance', ownerId: 'per-5' },
-  { id: 'lead-bofa-1', accountId: 'acc-bofa', businessUnit: 'Wealth & Asset Management', ownerId: 'per-2' },
-  { id: 'lead-bofa-2', accountId: 'acc-bofa', businessUnit: 'Compliance', ownerId: 'per-5' },
-  { id: 'lead-citi-1', accountId: 'acc-citi', businessUnit: 'Global Markets Technology', ownerId: 'per-1' },
-  { id: 'lead-citi-2', accountId: 'acc-citi', businessUnit: 'Treasury & Trade Solutions', ownerId: 'per-1' },
-  { id: 'lead-wells-1', accountId: 'acc-wells', businessUnit: 'Consumer Lending Platform', ownerId: 'per-2' },
-  { id: 'lead-hsbc-1', accountId: 'acc-hsbc', businessUnit: 'Commercial Banking', ownerId: 'per-5' },
-  { id: 'lead-hsbc-2', accountId: 'acc-hsbc', businessUnit: 'Financial Crime Technology', ownerId: 'per-5' },
-  { id: 'lead-pru-1', accountId: 'acc-pru', businessUnit: 'Claims Operations', ownerId: 'per-1' },
-  { id: 'lead-aetna-1', accountId: 'acc-aetna', businessUnit: 'Member Platform Engineering', ownerId: 'per-5' },
+  { id: 'lead-jpmc-1', accountId: 'acc-jpmc', businessUnit: 'Corporate & Investment Bank' },
+  { id: 'lead-jpmc-2', accountId: 'acc-jpmc', businessUnit: 'Consumer Banking Technology' },
+  { id: 'lead-jpmc-3', accountId: 'acc-jpmc', businessUnit: 'Risk & Compliance' },
+  { id: 'lead-bofa-1', accountId: 'acc-bofa', businessUnit: 'Wealth & Asset Management' },
+  { id: 'lead-bofa-2', accountId: 'acc-bofa', businessUnit: 'Compliance' },
+  { id: 'lead-citi-1', accountId: 'acc-citi', businessUnit: 'Global Markets Technology' },
+  { id: 'lead-citi-2', accountId: 'acc-citi', businessUnit: 'Treasury & Trade Solutions' },
+  { id: 'lead-wells-1', accountId: 'acc-wells', businessUnit: 'Consumer Lending Platform' },
+  { id: 'lead-hsbc-1', accountId: 'acc-hsbc', businessUnit: 'Commercial Banking' },
+  { id: 'lead-hsbc-2', accountId: 'acc-hsbc', businessUnit: 'Financial Crime Technology' },
+  { id: 'lead-pru-1', accountId: 'acc-pru', businessUnit: 'Claims Operations' },
+  { id: 'lead-aetna-1', accountId: 'acc-aetna', businessUnit: 'Member Platform Engineering' },
 ]
 
 export const deals: Deal[] = [
@@ -65,7 +65,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(5),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
-    partnerId: null,
   },
   {
     id: 'deal-2',
@@ -79,7 +78,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(48),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
-    partnerId: null,
   },
   {
     id: 'deal-3',
@@ -93,7 +91,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(96),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
-    partnerId: null,
   },
   {
     id: 'deal-4',
@@ -107,7 +104,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(31),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
-    partnerId: null,
   },
   {
     id: 'deal-5',
@@ -121,7 +117,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(70),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
-    partnerId: null,
   },
   {
     id: 'deal-6',
@@ -136,7 +131,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(9),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
-    partnerId: null,
   },
   {
     id: 'deal-7',
@@ -150,7 +144,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(58),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
-    partnerId: null,
   },
   {
     id: 'deal-8',
@@ -164,7 +157,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(84),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
-    partnerId: null,
   },
   {
     id: 'deal-9',
@@ -178,7 +170,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(26),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
-    partnerId: null,
   },
   {
     id: 'deal-10',
@@ -192,7 +183,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(6),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
-    partnerId: null,
   },
   {
     id: 'deal-11',
@@ -206,7 +196,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(140),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
-    partnerId: null,
   },
   {
     id: 'deal-12',
@@ -220,7 +209,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(120),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
-    partnerId: null,
   },
   {
     id: 'deal-13',
@@ -234,7 +222,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(77),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
-    partnerId: null,
   },
 
   {
@@ -251,7 +238,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(37),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
-    partnerId: null,
   },
 
   // --- Partner pipeline -------------------------------------------------------
@@ -268,7 +254,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(42),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-accenture',
   },
   {
     id: 'deal-15',
@@ -282,7 +267,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(4),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-deloitte',
   },
   {
     id: 'deal-16',
@@ -296,7 +280,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(64),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-ntt',
   },
   {
     id: 'deal-17',
@@ -310,7 +293,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(90),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-virtusa',
   },
   {
     id: 'deal-18',
@@ -324,7 +306,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(155),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-deloitte',
   },
   {
     id: 'deal-19',
@@ -339,7 +320,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(3),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-accenture',
   },
   {
     id: 'deal-20',
@@ -353,7 +333,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(18),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-accenture',
   },
   {
     id: 'deal-22',
@@ -367,7 +346,6 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(52),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
-    partnerId: 'acc-ntt',
   },
 ]
 

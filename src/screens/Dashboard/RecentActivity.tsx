@@ -1,16 +1,9 @@
 import type { ActivityView } from '@/lib/rollup'
-import type { Activity } from '@/types/domain'
 import { useSelection } from '@/app/selection'
 import { timeAgo } from '@/lib/format'
+import { activityKindLabel } from '@/lib/activityCategory'
+import { ActivityMarker } from '@/components/ui/ActivityMarker'
 import { EmptyState } from '@/components/ui/Card'
-
-const kindLabel: Record<Activity['kind'], string> = {
-  call: 'Call',
-  meeting: 'Meeting',
-  email: 'Email',
-  note: 'Note',
-  'stage-change': 'Stage change',
-}
 
 /** Recent activity across all three levels. Each entry opens its subject's drawer. */
 export function RecentActivity({ views }: { views: ActivityView[] }) {
@@ -34,11 +27,14 @@ export function RecentActivity({ views }: { views: ActivityView[] }) {
               </span>
               <span className="shrink-0 text-caption text-mist-gray">{timeAgo(activity.occurredAt)}</span>
             </div>
-            <p className="mt-8 line-clamp-2 text-body-sm leading-relaxed text-slate-gray">
-              {activity.summary}
-            </p>
-            <p className="mt-8 text-caption text-mist-gray">
-              {kindLabel[activity.kind]} · {authorName}
+            <div className="mt-8 flex gap-8">
+              <ActivityMarker kind={activity.kind} />
+              <p className="line-clamp-2 min-w-0 text-body-sm leading-relaxed text-slate-gray">
+                {activity.summary}
+              </p>
+            </div>
+            <p className="mt-8 pl-24 text-caption text-mist-gray">
+              {activityKindLabel[activity.kind]} · {authorName}
             </p>
           </button>
         </li>

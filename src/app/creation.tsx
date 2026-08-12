@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { Id } from '@/types/domain'
+import type { ContactType, Id } from '@/types/domain'
 
-export type CreateKind = 'account' | 'lead' | 'deal' | 'user'
+export type CreateKind = 'account' | 'lead' | 'deal' | 'user' | 'contact'
 
 /**
  * What is being created, plus whatever the click already told us.
@@ -17,6 +17,8 @@ export interface CreateRequest {
   leadId?: Id
   pipelineId?: Id
   stageId?: Id
+  /** Prefills the customer/partner side when adding a contact from a place that already knows it. */
+  contactType?: ContactType
 }
 
 interface CreationValue {

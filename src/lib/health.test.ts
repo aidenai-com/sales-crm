@@ -18,7 +18,6 @@ function deal(overrides: Partial<Deal> = {}): Deal {
     expectedCloseDate: new Date(NOW + 60 * dayMs).toISOString(),
     createdAt: new Date(NOW - 90 * dayMs).toISOString(),
     ownerId: 'per-1',
-    partnerId: null,
     ...overrides,
   }
 }

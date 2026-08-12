@@ -18,7 +18,6 @@ export type Row = Record<string, string | number>
 export function dealRows(views: DealView[]): Row[] {
   return views.map((v) => ({
     Account: v.account.name,
-    Partner: v.partner?.name ?? '',
     Opportunity: v.deal.name,
     'Business unit': v.lead?.businessUnit ?? '',
     Pipeline: v.pipeline.name,

@@ -29,20 +29,6 @@ class OwnerSlice(ORMModel):
     won_value: Decimal
 
 
-class PartnerSlice(ORMModel):
-    """
-    Value sourced through a partner (R8).
-
-    `partner_id` is null for the "Direct" row, which is deliberately included: partner
-    contribution is only meaningful next to the business that arrived without one.
-    """
-
-    partner_id: uuid.UUID | None
-    partner_name: str
-    open_count: int
-    open_value: Decimal
-    won_count: int
-    won_value: Decimal
 
 
 class ForecastSlice(ORMModel):
@@ -74,7 +60,6 @@ class AnalyticsFilters(ORMModel):
 
     pipeline_id: uuid.UUID | None
     owner_id: uuid.UUID | None
-    partner_id: uuid.UUID | None
     close_from: date | None
     close_to: date | None
     deal_count: int
@@ -84,7 +69,6 @@ class AnalyticsSummary(ORMModel):
     filters: AnalyticsFilters
     funnel: list[StageSlice]
     by_owner: list[OwnerSlice]
-    by_partner: list[PartnerSlice]
     forecast: list[ForecastSlice]
     outcomes: OutcomeMix
     total_open_value: Decimal
@@ -97,6 +81,5 @@ __all__ = [
     "ForecastSlice",
     "OutcomeMix",
     "OwnerSlice",
-    "PartnerSlice",
     "StageSlice",
 ]

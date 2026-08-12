@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import type { Id } from '@/types/domain'
+import type { DealContactAssignment, Id } from '@/types/domain'
 import { useStore } from '@/data/store'
+import { assignableOwners } from '@/lib/people'
 import { useAuth } from '@/app/auth'
 import { routes, useRouter } from '@/app/router'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, TextInput } from '@/components/ui/Field'
+import { DealContactPicker } from './DealContactPicker'
 
 /** A sensible default close date: far enough out to be plausible, near enough to be real. */
 function defaultCloseDate(): string {
@@ -40,18 +42,22 @@ export function CreateDealForm({
   const { user } = useAuth()
   const { navigate } = useRouter()
 
-  const customers = snapshot.accounts.filter((a) => !a.isPartner)
-  const partners = snapshot.accounts.filter((a) => a.isPartner)
+  // Every account. There is no partner field on a deal any more, so there is no second list — anybody
+  // involved from any company is attached below as a person.
+  const customers = snapshot.accounts
 
   const [name, setName] = useState('')
   const [accountId, setAccountId] = useState(defaultAccountId ?? customers[0]?.id ?? '')
   const [leadId, setLeadId] = useState<string>(defaultLeadId ?? '')
   const [pipelineId, setPipelineId] = useState(defaultPipelineId ?? snapshot.pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(defaultStageId ?? '')
-  const [partnerId, setPartnerId] = useState<string>('')
   const [value, setValue] = useState(0)
   const [closeDate, setCloseDate] = useState(defaultCloseDate)
   const [ownerId, setOwnerId] = useState(user?.id ?? snapshot.people[0]?.id ?? '')
+  const [contacts, setContacts] = useState<DealContactAssignment[]>([])
+  //: The roles this deal will track. Chosen here so the deal starts with the questions it needs
+  //: answered — the people who fill them are identified as it progresses.
+  const [roleIds, setRoleIds] = useState<Id[]>([])
   const [saving, setSaving] = useState(false)
 
   const pipeline = snapshot.pipelines.find((p) => p.id === pipelineId)
@@ -68,14 +74,40 @@ export function CreateDealForm({
   const leadsForAccount = snapshot.leads.filter((l) => l.accountId === accountId)
 
   const trimmed = name.trim()
-  const canSave = trimmed.length > 0 && accountId !== '' && effectiveStageId !== '' && !saving
+  // Why the form cannot be submitted yet, in the order somebody fills the fields in.
+  //
+  // A single reason rather than a list: fixing the first one usually reveals whether there is a second,
+  // and a form that reports four problems at once reads as broken rather than incomplete.
+  //
+  // This is the *only* place the "a deal needs at least one contact" rule is enforced — the API accepts
+  // a payload without contacts so that it stays compatible and so that a missing contact cannot mask an
+  // ownership error. That makes the guard below load-bearing, not a convenience.
+  const blockedBecause =
+    trimmed.length === 0
+      ? 'Give the opportunity a name.'
+      : accountId === ''
+        ? 'Choose the customer.'
+        : effectiveStageId === ''
+          ? 'Choose a stage.'
+          : contacts.length === 0
+            ? 'Add at least one contact, so there is a route to the customer.'
+            : null
+
+  const canSave = blockedBecause === null && !saving
+
+  function changeAccount(nextId: string) {
+    setAccountId(nextId)
+    setLeadId('')
+    // Contacts are *not* cleared. They used to be, because a deal's people had to work at its customer
+    // or its partner and changing the customer could invalidate them. That rule is gone with the partner
+    // column — anybody from any company can be on a deal — so clearing them would now just discard work
+    // somebody had already done.
+  }
 
   function changePipeline(nextId: string) {
     setPipelineId(nextId)
     // The old stage belongs to the old pipeline; keeping it would be a guaranteed 422.
     setStageId('')
-    const next = snapshot.pipelines.find((p) => p.id === nextId)
-    if (next && !next.tracksPartner) setPartnerId('')
   }
 
   async function submit() {
@@ -86,12 +118,13 @@ export function CreateDealForm({
         name: trimmed,
         accountId,
         leadId: leadId || null,
-        partnerId: pipeline?.tracksPartner ? partnerId || null : null,
         pipelineTemplateId: pipelineId,
         stageId: effectiveStageId,
         value,
         expectedCloseDate: closeDate,
         ownerId,
+        contacts,
+        roles: roleIds,
       })
       if (created) {
         onDone()
@@ -139,10 +172,7 @@ export function CreateDealForm({
         <Select
           value={accountId}
           disabled={saving}
-          onChange={(e) => {
-            setAccountId(e.target.value)
-            setLeadId('')
-          }}
+          onChange={(e) => changeAccount(e.target.value)}
         >
           {customers.map((account) => (
             <option key={account.id} value={account.id}>
@@ -189,19 +219,6 @@ export function CreateDealForm({
         </Field>
       </div>
 
-      {/* R8: only on pipelines that track one. */}
-      {pipeline?.tracksPartner && (
-        <Field label="Partner" hint="Sits alongside the customer on the same record.">
-          <Select value={partnerId} disabled={saving} onChange={(e) => setPartnerId(e.target.value)}>
-            <option value="">No partner</option>
-            {partners.map((partner) => (
-              <option key={partner.id} value={partner.id}>
-                {partner.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
 
       <div className="grid grid-cols-2 gap-16">
         <Field label="Value" hint="In USD.">
@@ -227,7 +244,7 @@ export function CreateDealForm({
 
       <Field label="Owner">
         <Select value={ownerId} disabled={saving} onChange={(e) => setOwnerId(e.target.value)}>
-          {snapshot.people.map((person) => (
+          {assignableOwners(snapshot.people, ownerId).map((person) => (
             <option key={person.id} value={person.id}>
               {person.name}
             </option>
@@ -235,13 +252,33 @@ export function CreateDealForm({
         </Select>
       </Field>
 
-      <div className="flex items-center gap-8 pt-8">
-        <Button type="submit" loading={saving} disabled={!canSave}>
-          {saving ? 'Creating' : 'Create deal'}
-        </Button>
-        <Button type="button" variant="ghost" disabled={saving} onClick={onDone}>
-          Cancel
-        </Button>
+      <DealContactPicker
+        accountId={accountId}
+        contacts={contacts}
+        onContactsChange={setContacts}
+        roleIds={roleIds}
+        onRolesChange={setRoleIds}
+        disabled={saving}
+      />
+
+      <div className="pt-8">
+        {/* A disabled button with no stated reason is a dead end. `aria-live` because the message
+            changes as fields are filled in, and a screen-reader user would otherwise never learn that
+            the reason had moved on. */}
+        {blockedBecause && !saving && (
+          <p aria-live="polite" className="mb-8 text-caption text-slate-gray">
+            {blockedBecause}
+          </p>
+        )}
+
+        <div className="flex items-center gap-8">
+          <Button type="submit" loading={saving} disabled={!canSave}>
+            {saving ? 'Creating' : 'Create deal'}
+          </Button>
+          <Button type="button" variant="ghost" disabled={saving} onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </form>
   )

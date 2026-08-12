@@ -160,7 +160,6 @@ function DealRow({ node, indent, note }: { node: DealNode; indent: 2 | 3; note?:
           <span className="block truncate text-body-sm font-medium text-ink-navy">{view.deal.name}</span>
           <span className="mt-[2px] block truncate text-caption text-slate-gray">
             {view.stage.name}
-            {view.partner && ` · via ${view.partner.name}`}
             {note && ` · ${note}`}
           </span>
         </span>

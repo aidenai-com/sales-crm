@@ -13,12 +13,24 @@ export function Menu({
   children,
   align = 'right',
   className,
+  triggerClassName = 'size-24 rounded-md',
 }: {
   label: string
   trigger: ReactNode
   children: (close: () => void) => ReactNode
   align?: 'left' | 'right'
   className?: string
+  /**
+   * The trigger button's geometry — size and radius.
+   *
+   * A default rather than something layered on top, because `cn` is a plain join with no
+   * tailwind-merge: passing `size-32` alongside a hardcoded `size-24` would leave both classes on the
+   * element and let CSS source order pick the winner. Replacing the value is the only safe way.
+   *
+   * 24px suits a menu hanging off a dense list row, which is where this component started. The header
+   * needs 32px to line up with the rest of the bar.
+   */
+  triggerClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -55,7 +67,10 @@ export function Menu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="grid size-24 place-items-center rounded-md text-mist-gray transition-colors hover:bg-pebble hover:text-slate-gray"
+        className={cn(
+          'grid place-items-center text-mist-gray transition-colors hover:bg-pebble hover:text-slate-gray',
+          triggerClassName,
+        )}
       >
         {trigger}
       </button>

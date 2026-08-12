@@ -26,14 +26,6 @@ export function AnalyticsFilters({
   /** Echoed from the server, so the count describes the data actually drawn. */
   dealCount: number | null
 }) {
-  // Only accounts flagged as partners. Offering every account here would let someone filter
-  // by a customer that can never appear in the partner column and read the empty result as
-  // "this partner brought nothing".
-  const partners = useMemo(
-    () => snapshot.accounts.filter((account) => account.isPartner),
-    [snapshot.accounts],
-  )
-
   const owners = useMemo(
     () => [...snapshot.people].sort((a, b) => a.name.localeCompare(b.name)),
     [snapshot.people],
@@ -45,11 +37,11 @@ export function AnalyticsFilters({
   const blankToNull = (value: string) => (value === '' ? null : value)
 
   const active =
-    query.pipelineId || query.ownerId || query.partnerId || query.closeFrom || query.closeTo
+    query.pipelineId || query.ownerId || query.closeFrom || query.closeTo
 
   return (
     <div className="rounded-3xl border border-hairline bg-paper p-24 shadow-sm">
-      <div className="grid gap-16 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-16 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Pipeline">
           <Select
             value={query.pipelineId ?? ''}
@@ -73,20 +65,6 @@ export function AnalyticsFilters({
             {owners.map((person) => (
               <option key={person.id} value={person.id}>
                 {person.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <Field label="Partner">
-          <Select
-            value={query.partnerId ?? ''}
-            onChange={(event) => set({ partnerId: blankToNull(event.target.value) })}
-          >
-            <option value="">All sources</option>
-            {partners.map((partner) => (
-              <option key={partner.id} value={partner.id}>
-                {partner.name}
               </option>
             ))}
           </Select>
@@ -122,7 +100,6 @@ export function AnalyticsFilters({
               onChange({
                 pipelineId: null,
                 ownerId: null,
-                partnerId: null,
                 closeFrom: null,
                 closeTo: null,
               })

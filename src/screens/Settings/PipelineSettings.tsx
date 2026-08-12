@@ -155,20 +155,6 @@ export function PipelineSettings() {
                   />
                 </Field>
               </div>
-
-              {isAdmin && (
-                <label className="flex cursor-pointer items-center gap-8 text-body-sm text-slate-gray">
-                  <input
-                    type="checkbox"
-                    checked={pipeline.tracksPartner}
-                    onChange={(e) =>
-                      void store.updateTemplate(pipeline.id, { tracksPartner: e.target.checked })
-                    }
-                    className="size-16 rounded-md accent-signal-blue"
-                  />
-                  Involves a partner
-                </label>
-              )}
             </div>
 
             <div className="mb-16 flex items-center justify-between gap-16">
@@ -252,7 +238,7 @@ function PipelineRail({
   onSelect,
   dealCount,
 }: {
-  pipelines: Array<{ id: string; name: string; tracksPartner: boolean; stages: unknown[] }>
+  pipelines: Array<{ id: string; name: string; stages: unknown[] }>
   activeId: string
   onSelect: (id: string) => void
   dealCount: (id: string) => number
@@ -281,11 +267,6 @@ function PipelineRail({
                 <span className="mt-[2px] block text-caption text-slate-gray">
                   {p.stages.length} stages · {dealCount(p.id)} deals
                 </span>
-                {p.tracksPartner && (
-                  <span className="mt-8 inline-flex rounded-full bg-pebble px-8 py-[2px] text-caption font-medium text-slate-gray">
-                    Partner
-                  </span>
-                )}
               </button>
             </li>
           )

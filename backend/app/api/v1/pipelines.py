@@ -82,9 +82,8 @@ async def create_pipeline(
             # pipelines are a variation on one that already works.
             source = await _require_template(db, payload.copy_stages_from)
             template = await service.duplicate_template(db, source, payload.name)
-            template.tracks_partner = payload.tracks_partner
         else:
-            template = await service.create_template(db, payload.name, payload.tracks_partner)
+            template = await service.create_template(db, payload.name)
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()

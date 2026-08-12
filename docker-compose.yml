@@ -83,6 +83,33 @@ services:
       echo 'Bucket ${S3_BUCKET:-crm-attachments} ready'
       "
 
+  # Catches every email the app sends and shows it in a browser, instead of delivering it.
+  #
+  # This exists so the real SMTP path runs in development. The alternative — leaving SMTP_HOST
+  # blank — silently swaps in a logging stand-in, so the code that actually opens a connection,
+  # negotiates TLS and hands over a message is never executed until production. Nudges and
+  # reminder mail are worth more confidence than that.
+  #
+  # Pointing at real credentials later is a `.env` change and nothing else: SMTP_HOST, port,
+  # user, password. No code moves.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: crm-mailpit
+    restart: unless-stopped
+    ports:
+      # 1025 is the SMTP port the API sends to; 8025 is the web inbox you read.
+      # Deliberately not named SMTP_PORT: that name belongs to the backend's client setting in
+      # backend/.env, and one variable driving both a container mapping and a client would
+      # break the moment they need to differ.
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      # Nothing is persisted. A dev mailbox that survives restarts just accumulates noise from
+      # test runs, and every message here is reproducible by triggering the action again.
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
   # A live view of the database in the browser. Development only — it is a second web app
   # with its own login, and nothing in production should reach the database this way.
   #

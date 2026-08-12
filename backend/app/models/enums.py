@@ -25,9 +25,14 @@ class ActivityKind(str, enum.Enum):
     """
     What kind of thing happened.
 
-    Two of these are written by the server rather than logged by a person: STAGE_CHANGE when
-    a deal moves, and DOCUMENT when a file is filed against or removed from a deliverable.
-    Neither is offered in the log-activity form — see `LoggableActivityKind` on the frontend.
+    Three of these are written by the server rather than logged by a person: STAGE_CHANGE when
+    a deal moves, DOCUMENT when a file is filed against or removed from a deliverable, and
+    NUDGE when an administrator chases a deal's owner. None is offered in the log-activity form
+    — see `LoggableActivityKind` on the frontend.
+
+    NUDGE is the one kind that does NOT count as a touch. See `NON_TOUCH_KINDS` in
+    `app.services.health`: an administrator asking for work to happen is not the work happening,
+    and counting it would clear the very staleness flag that prompted the nudge.
 
     The frontend groups these into three coloured categories (touchpoint, document, system).
     That grouping is derived from the kind and deliberately not stored: it has no exceptions,
@@ -41,12 +46,26 @@ class ActivityKind(str, enum.Enum):
     NOTE = "note"
     STAGE_CHANGE = "stage-change"
     DOCUMENT = "document"
+    NUDGE = "nudge"
 
 
 class ActivitySubjectType(str, enum.Enum):
     ACCOUNT = "account"
     LEAD = "lead"
     DEAL = "deal"
+
+
+class ContactType(str, enum.Enum):
+    """
+    Which side of the deal a contact sits on.
+
+    The two types named in the requirements. A partner contact's account already *is* the partner
+    account, so this duplicates what the foreign key says — it exists because the two are asked for
+    separately and because filtering a list needs something cheaper to test than a join.
+    """
+
+    CUSTOMER = "customer"
+    PARTNER = "partner"
 
 
 class Health(str, enum.Enum):

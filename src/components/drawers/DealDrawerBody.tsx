@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { pendingKey, useStore } from '@/data/store'
+import { assignableOwners } from '@/lib/people'
 import { useSelection } from '@/app/selection'
 import { Link, routes } from '@/app/router'
 import { dealHealthDetail } from '@/lib/health'
@@ -32,10 +33,8 @@ export function DealDrawerBody({ dealId }: { dealId: string }) {
 
   const account = snapshot.accounts.find((a) => a.id === deal.accountId)
   const lead = deal.leadId ? snapshot.leads.find((l) => l.id === deal.leadId) : null
-  const partner = deal.partnerId ? snapshot.accounts.find((a) => a.id === deal.partnerId) : null
   const stage = pipeline.stages.find((s) => s.id === deal.stageId)
   const healthDetail = dealHealthDetail(deal, snapshot.activities)
-  const partnerAccounts = snapshot.accounts.filter((a) => a.isPartner)
 
   return (
     <div className="space-y-24">
@@ -104,7 +103,7 @@ export function DealDrawerBody({ dealId }: { dealId: string }) {
             disabled={saving}
             onChange={(e) => void updateDeal(deal.id, { ownerId: e.target.value })}
           >
-            {snapshot.people.map((person) => (
+            {assignableOwners(snapshot.people, deal.ownerId).map((person) => (
               <option key={person.id} value={person.id}>
                 {person.name}
               </option>
@@ -116,28 +115,12 @@ export function DealDrawerBody({ dealId }: { dealId: string }) {
         <DealCloseDateField deal={deal} />
       </div>
 
-      {/* R8: partner-led deals carry both fields on the same record. */}
-      {pipeline.tracksPartner && (
-        <Field label="Partner" hint="Shown alongside the customer on partner-led deals.">
-          <Select
-            value={deal.partnerId ?? ''}
-            disabled={saving}
-            onChange={(e) => void updateDeal(deal.id, { partnerId: e.target.value || null })}
-          >
-            <option value="">No partner</option>
-            {partnerAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
+      {/* No Partner row. A deal has no partner field — who else is involved shows in its people, on the
+          deal page's People panel, where each person's own company is named. */}
 
       <div className="rounded-2xl border border-hairline p-16">
         <dl className="space-y-8">
           <Row label="Customer" value={account?.name ?? '—'} />
-          {pipeline.tracksPartner && <Row label="Partner" value={partner?.name ?? 'No partner'} />}
           <Row label="Business unit" value={lead?.businessUnit ?? 'Not tied to a lead'} />
           <Row label="Industry" value={account?.industry ?? '—'} />
         </dl>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ActivitySubjectType, Id, LoggableActivityKind } from '@/types/domain'
 import { pendingKey, useStore } from '@/data/store'
+import { assignableOwners } from '@/lib/people'
 import { useAuth } from '@/app/auth'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea } from '@/components/ui/Field'
@@ -59,7 +60,7 @@ export function ActivityLogForm({
         </Field>
         <Field label="Logged by">
           <Select value={authorId} disabled={saving} onChange={(e) => setAuthorId(e.target.value)}>
-            {snapshot.people.map((person) => (
+            {assignableOwners(snapshot.people, authorId).map((person) => (
               <option key={person.id} value={person.id}>
                 {person.name}
               </option>

@@ -8,19 +8,32 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Account, Deal, Id, Lead, LoggableActivityKind, Person, Snapshot } from '@/types/domain'
+import type {
+  Account,
+  Contact,
+  Deal,
+  Id,
+  Lead,
+  LoggableActivityKind,
+  Person,
+  Snapshot,
+} from '@/types/domain'
 import { ApiError, errorMessage } from '@/api/client'
 import {
+  contactApi,
   createApi,
   loadSnapshot,
   pipelineApi,
   readApi,
   writeApi,
+  type ContactPatchBody,
   type DealPatchBody,
   type NewAccount,
+  type NewContact,
   type NewDeal,
   type NewLead,
   type NewUser,
+  type AuthUser,
   type StagePatchBody,
 } from '@/api/endpoints'
 
@@ -31,6 +44,8 @@ const EMPTY: Snapshot = {
   deals: [],
   activities: [],
   pipelines: [],
+  contacts: [],
+  contactRoles: [],
 }
 
 export type DeleteStageOutcome =
@@ -53,6 +68,9 @@ interface StoreValue {
   // Creation returns the new record so a caller can select or navigate to it, and null
   // when the request failed — the error is already on screen by then.
   createAccount: (input: NewAccount) => Promise<Account | null>
+  createContact: (input: NewContact) => Promise<Contact | null>
+  updateContact: (contactId: Id, patch: ContactPatchBody) => Promise<Contact | null>
+  deleteContact: (contactId: Id) => Promise<boolean>
   createLead: (input: NewLead) => Promise<Lead | null>
   createDeal: (input: NewDeal) => Promise<Deal | null>
   /** Admin only. Returns the new person so owner dropdowns can select them straight away. */
@@ -80,14 +98,29 @@ interface StoreValue {
   }) => Promise<void>
 
   // Pipeline administration (admin only; the API returns 403 for reps)
-  updateTemplate: (pipelineId: Id, patch: { name?: string; tracksPartner?: boolean }) => Promise<void>
-  createTemplate: (name: string, tracksPartner: boolean, copyStagesFrom?: Id) => Promise<void>
+  updateTemplate: (pipelineId: Id, patch: { name?: string }) => Promise<void>
+  createTemplate: (name: string, copyStagesFrom?: Id) => Promise<void>
   duplicateTemplate: (pipelineId: Id, name: string) => Promise<void>
   addStage: (pipelineId: Id, name?: string) => Promise<void>
   updateStage: (pipelineId: Id, stageId: Id, patch: StagePatchBody) => Promise<void>
   reorderStage: (pipelineId: Id, stageId: Id, toIndex: number) => Promise<void>
   deleteStage: (pipelineId: Id, stageId: Id) => Promise<DeleteStageOutcome>
   reassignDeals: (pipelineId: Id, fromStageId: Id, toStageId: Id) => Promise<void>
+}
+
+/**
+ * A freshly created user as the snapshot holds them. Active by definition — creation has no way to
+ * make an inactive one, and the alternative would be a picker that cannot offer the person somebody
+ * just added in order to assign them something.
+ */
+function toNewPerson(created: AuthUser): Person {
+  return {
+    id: created.id,
+    name: created.name,
+    initials: created.initials,
+    role: created.jobTitle,
+    isActive: true,
+  }
 }
 
 const StoreContext = createContext<StoreValue | null>(null)
@@ -100,6 +133,7 @@ export const pendingKey = {
   stage: (id: Id) => `stage:${id}`,
   pipeline: (id: Id) => `pipeline:${id}`,
   activity: (subjectId: Id) => `activity:${subjectId}`,
+  contact: (id: Id) => `contact:${id}`,
 } as const
 
 /**
@@ -243,11 +277,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           commit: (current, created) => ({ ...current, leads: [...current.leads, created] }),
         }),
 
-      createDeal: (input) =>
+      createContact: (input) =>
         mutate({
+          key: pendingKey.account(input.accountId),
+          request: () => createApi.contact(input),
+          commit: (current, created) => ({
+            ...current,
+            contacts: [...current.contacts, created].sort((a, b) =>
+              a.fullName.localeCompare(b.fullName),
+            ),
+          }),
+        }),
+
+      updateContact: (contactId, patch) =>
+        mutate({
+          key: pendingKey.contact(contactId),
+          request: () => contactApi.update(contactId, patch),
+          commit: (current, updated) => ({
+            ...current,
+            contacts: current.contacts.map((c) => (c.id === contactId ? updated : c)),
+          }),
+        }),
+
+      deleteContact: async (contactId) => {
+        const result = await mutate({
+          key: pendingKey.contact(contactId),
+          // Optimistic. A deleted row vanishing immediately is the expected feel, and `mutate`
+          // restores the pre-change snapshot if the request is refused.
+          optimistic: (current) => ({
+            ...current,
+            contacts: current.contacts.filter((c) => c.id !== contactId),
+          }),
+          request: () => contactApi.remove(contactId),
+        })
+        return result !== null
+      },
+
+      createDeal: async (input) => {
+        // The guard rail, at the one place every deal creation passes through.
+        //
+        // The API accepts a deal with no contacts — deliberately, so that requiring them cannot mask an
+        // ownership error and so existing callers keep working — which makes this the boundary that
+        // actually enforces the rule. `CreateDealForm` disables its button for the same reason, but a
+        // check that lives only in one component is one refactor away from being gone.
+        //
+        // Reported through the store's own error channel rather than thrown: every other refusal a user
+        // can cause surfaces the same way, and a thrown error here would be an unhandled rejection in
+        // whichever component happened to call it.
+        if (input.contacts.length === 0) {
+          setError('A deal needs at least one contact. Add the person you are dealing with.')
+          return null
+        }
+
+        return mutate({
           request: () => createApi.deal(input),
           commit: (current, created) => ({ ...current, deals: [...current.deals, created] }),
-        }),
+        })
+      },
 
       createUser: (input) =>
         mutate({
@@ -256,16 +342,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // assign them something, and a dropdown that does not list them yet blocks that.
           commit: (current, created) => ({
             ...current,
-            people: [
-              ...current.people,
-              { id: created.id, name: created.name, initials: created.initials, role: created.jobTitle },
-            ].sort((a, b) => a.name.localeCompare(b.name)),
+            people: [...current.people, toNewPerson(created)].sort((a, b) =>
+              a.name.localeCompare(b.name),
+            ),
           }),
-        }).then((created) =>
-          created
-            ? { id: created.id, name: created.name, initials: created.initials, role: created.jobTitle }
-            : null,
-        ),
+        }).then((created) => (created ? toNewPerson(created) : null)),
 
       moveDealToStage: async (dealId, stageId) => {
         const deal = latest.current.deals.find((d) => d.id === dealId)
@@ -377,9 +458,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
       },
 
-      createTemplate: async (name, tracksPartner, copyStagesFrom) => {
+      createTemplate: async (name, copyStagesFrom) => {
         await mutate({
-          request: () => pipelineApi.create(name, tracksPartner, copyStagesFrom),
+          request: () => pipelineApi.create(name, copyStagesFrom),
           commit: (current, created) => ({ ...current, pipelines: [...current.pipelines, created] }),
         })
       },

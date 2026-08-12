@@ -120,8 +120,7 @@ export function DealsIndex() {
         v.account.name.toLowerCase().includes(q) ||
         v.stage.name.toLowerCase().includes(q) ||
         v.ownerName.toLowerCase().includes(q) ||
-        (v.lead?.businessUnit.toLowerCase().includes(q) ?? false) ||
-        (v.partner?.name.toLowerCase().includes(q) ?? false)
+        (v.lead?.businessUnit.toLowerCase().includes(q) ?? false)
       )
     })
 
@@ -257,7 +256,7 @@ export function DealsIndex() {
             <SearchField
               value={query}
               onValueChange={setQuery}
-              placeholder="Search deals, customers, partners, business units, owners"
+              placeholder="Search deals, customers, business units, owners"
               aria-label="Search deals"
               className="min-w-[280px] flex-1"
             />
@@ -436,7 +435,7 @@ function SortableTh({
 }
 
 function DealRow({ view }: { view: DealView }) {
-  const { deal, account, lead, partner, stage } = view
+  const { deal, account, lead, stage } = view
 
   return (
     <tr className="border-b border-hairline transition-colors last:border-0 hover:bg-cloud">
@@ -449,7 +448,6 @@ function DealRow({ view }: { view: DealView }) {
         </Link>
         <span className="mt-[2px] block text-caption text-slate-gray">
           {account.name}
-          {partner && ` · via ${partner.name}`}
           {lead && ` · ${lead.businessUnit}`}
         </span>
       </td>

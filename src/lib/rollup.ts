@@ -28,7 +28,6 @@ export interface DealView {
   deal: Deal
   account: Account
   lead: Lead | null
-  partner: Account | null
   stage: Stage
   pipeline: PipelineTemplate
   ownerName: string
@@ -60,7 +59,6 @@ export function buildDealViews(snapshot: Snapshot, now: number = Date.now()): De
       deal,
       account,
       lead: deal.leadId ? leadsById.get(deal.leadId) ?? null : null,
-      partner: deal.partnerId ? accountsById.get(deal.partnerId) ?? null : null,
       stage,
       pipeline,
       ownerName: peopleById.get(deal.ownerId)?.name ?? 'Unassigned',
@@ -195,7 +193,7 @@ export interface AccountNode {
 /**
  * Builds the Account -> Lead -> Deal tree (R3).
  *
- * Partner accounts are excluded from the top level: a partner appears on partner-led
+ * Every account appears at the top level: a partner shows through the people on a deal, not
  * deals via the Partner field, not as a customer node of its own. This keeps the tree
  * answering one question — who are our customers and what is in flight with them.
  */
@@ -208,8 +206,9 @@ export function buildTree(snapshot: Snapshot, views: DealView[]): AccountNode[] 
     viewsByAccount.set(view.deal.accountId, list)
   }
 
+  // Every account appears. This used to drop ones flagged as partners; with the flag gone, an account
+  // that has only ever been a partner simply shows with no deals of its own, which is true.
   return snapshot.accounts
-    .filter((account) => !account.isPartner)
     .map((account) => {
       const accountViews = viewsByAccount.get(account.id) ?? []
       const accountLeads = snapshot.leads.filter((l) => l.accountId === account.id)
@@ -220,7 +219,9 @@ export function buildTree(snapshot: Snapshot, views: DealView[]): AccountNode[] 
           kind: 'lead',
           id: lead.id,
           lead,
-          ownerName: peopleById.get(lead.ownerId)?.name ?? 'Unassigned',
+          // A business unit has no owner of its own; the account's is shown so every level of the
+          // tree still names somebody accountable.
+          ownerName: peopleById.get(account.ownerId)?.name ?? 'Unassigned',
           deals: leadViews.map((view) => ({ kind: 'deal', id: view.deal.id, view })),
           rollUp: rollUp(leadViews),
         }
@@ -257,7 +258,7 @@ export function filterTree(nodes: AccountNode[], query: string): AccountNode[] {
       d.view.deal.name.toLowerCase().includes(q) ||
       d.view.stage.name.toLowerCase().includes(q) ||
       d.view.ownerName.toLowerCase().includes(q) ||
-      (d.view.partner?.name.toLowerCase().includes(q) ?? false)
+      false
 
     const leads = node.leads
       .map((lead) => {

@@ -4,6 +4,7 @@ import { CreateAccountForm } from './CreateAccountForm'
 import { CreateLeadForm } from './CreateLeadForm'
 import { CreateDealForm } from './CreateDealForm'
 import { CreateUserForm } from './CreateUserForm'
+import { CreateContactForm } from './CreateContactForm'
 
 const COPY = {
   account: {
@@ -21,6 +22,10 @@ const COPY = {
   user: {
     title: 'New user',
     eyebrow: 'Team',
+  },
+  contact: {
+    title: 'New contact',
+    eyebrow: 'Contact',
   },
 } as const
 
@@ -44,6 +49,13 @@ export function CreateDrawer() {
         <CreateLeadForm defaultAccountId={request.accountId} onDone={closeCreate} />
       )}
       {request.kind === 'user' && <CreateUserForm onDone={closeCreate} />}
+      {request.kind === 'contact' && (
+        <CreateContactForm
+          defaultAccountId={request.accountId}
+          defaultContactType={request.contactType}
+          onDone={closeCreate}
+        />
+      )}
       {request.kind === 'deal' && (
         <CreateDealForm
           defaultAccountId={request.accountId}

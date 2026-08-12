@@ -13,6 +13,7 @@ export function Drawer({
   eyebrow,
   children,
   footer,
+  size = 'md',
 }: {
   open: boolean
   onClose: () => void
@@ -20,6 +21,14 @@ export function Drawer({
   eyebrow?: string
   children: ReactNode
   footer?: ReactNode
+  /**
+   * How wide the panel gets on a large screen.
+   *
+   * `md` suits a record's fields and timeline. `wide` exists for the assistant: a conversation
+   * reads badly in a narrow column — answers wrap every few words, and a table of deals in a
+   * reply becomes unreadable — so it takes roughly half the viewport instead.
+   */
+  size?: 'md' | 'wide'
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -60,7 +69,10 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col bg-paper shadow-sm-2',
+          'absolute inset-y-0 right-0 flex w-full flex-col bg-paper shadow-sm-2',
+          // Capped in ch rather than px on the wide variant: the constraint that matters for
+          // reading prose is line length in characters, not a pixel count.
+          size === 'wide' ? 'max-w-[min(92vw,760px)]' : 'max-w-[520px]',
           'motion-safe:animate-[slide-in_180ms_cubic-bezier(0.22,1,0.36,1)]',
         )}
       >

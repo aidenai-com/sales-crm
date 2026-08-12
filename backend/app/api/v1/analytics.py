@@ -28,7 +28,6 @@ from app.schemas.analytics import (
     ForecastSlice,
     OutcomeMix,
     OwnerSlice,
-    PartnerSlice,
     StageSlice,
 )
 from app.services import pipelines as pipeline_service
@@ -44,7 +43,6 @@ async def analytics_summary(
     user: CurrentUser,
     pipeline_id: uuid.UUID | None = Query(default=None),
     owner_id: uuid.UUID | None = Query(default=None),
-    partner_id: uuid.UUID | None = Query(default=None),
     close_from: date | None = Query(default=None),
     close_to: date | None = Query(default=None),
 ) -> AnalyticsSummary:
@@ -58,8 +56,6 @@ async def analytics_summary(
     deals = await deals_repo.list_all(db, user, pipeline_id=pipeline_id, owner_id=owner_id)
     templates = await pipeline_service.list_templates(db)
 
-    if partner_id is not None:
-        deals = [deal for deal in deals if deal.partner_id == partner_id]
     if close_from is not None:
         deals = [deal for deal in deals if deal.expected_close_date >= close_from]
     if close_to is not None:
@@ -71,14 +67,12 @@ async def analytics_summary(
         filters=AnalyticsFilters(
             pipeline_id=pipeline_id,
             owner_id=owner_id,
-            partner_id=partner_id,
             close_from=close_from,
             close_to=close_to,
             deal_count=len(deals),
         ),
         funnel=_funnel(templates, deals, pipeline_id),
         by_owner=_by_owner(deals),
-        by_partner=_by_partner(deals),
         forecast=_forecast(open_deals),
         outcomes=_outcomes(deals),
         total_open_value=sum((deal.value for deal in open_deals), ZERO),
@@ -160,36 +154,6 @@ def _by_owner(deals: list[Deal]) -> list[OwnerSlice]:
         for owner_id, owned in grouped.items()
     ]
     slices.sort(key=lambda item: (-item.open_value, item.owner_name))
-    return slices
-
-
-def _by_partner(deals: list[Deal]) -> list[PartnerSlice]:
-    """
-    Value sourced through each partner, with a Direct row alongside.
-
-    Direct is included on purpose: partner contribution only means something next to the
-    business that arrived without a partner.
-    """
-    grouped: dict[uuid.UUID | None, list[Deal]] = defaultdict(list)
-    names: dict[uuid.UUID | None, str] = {None: "Direct"}
-    for deal in deals:
-        grouped[deal.partner_id].append(deal)
-        if deal.partner_id is not None and deal.partner is not None:
-            names[deal.partner_id] = deal.partner.name
-
-    slices = [
-        PartnerSlice(
-            partner_id=partner_id,
-            partner_name=names.get(partner_id, "Unknown partner"),
-            open_count=sum(1 for d in sourced if d.stage.kind is StageKind.OPEN),
-            open_value=sum((d.value for d in sourced if d.stage.kind is StageKind.OPEN), ZERO),
-            won_count=sum(1 for d in sourced if d.stage.kind is StageKind.WON),
-            won_value=sum((d.value for d in sourced if d.stage.kind is StageKind.WON), ZERO),
-        )
-        for partner_id, sourced in grouped.items()
-    ]
-    # Direct last regardless of size, so the partner rows read as the subject of the chart.
-    slices.sort(key=lambda item: (item.partner_id is None, -item.open_value, item.partner_name))
     return slices
 
 

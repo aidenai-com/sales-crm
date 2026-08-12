@@ -171,9 +171,11 @@ function DeliverableRow({
   onRemoveAttachment: (attachmentId: Id) => void
 }) {
   const fileInput = useRef<HTMLInputElement>(null)
-  const [expanded, setExpanded] = useState(false)
   const attachments = deliverable.attachments
-  const showDocuments = expanded || attachments.length > 0
+  // Open when there is something to see, but genuinely collapsible from there. This used to be
+  // `expanded || attachments.length > 0`, which made the toggle a dead control on exactly the
+  // rows that had anything to collapse.
+  const [expanded, setExpanded] = useState(attachments.length > 0)
 
   return (
     <li
@@ -210,15 +212,30 @@ function DeliverableRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-8">
-          {attachments.length > 0 && (
+          {/* One slot, three states, so nothing shifts as a row changes. The middle state is
+              the point of it: a ticked box with no document behind it used to look identical
+              to a row with nothing to say, which is exactly the row worth spotting when you
+              are looking for the file to review. */}
+          {attachments.length > 0 ? (
             <button
               onClick={() => setExpanded((open) => !open)}
-              aria-expanded={expanded || attachments.length > 0}
-              className="inline-flex items-center gap-[4px] rounded-lg px-8 py-[4px] text-caption font-medium text-slate-gray hover:bg-pebble"
+              aria-expanded={expanded}
+              className="inline-flex items-center gap-[4px] rounded-lg bg-sky-cyan/12 px-8 py-[4px] text-caption font-semibold text-sky-cyan hover:bg-sky-cyan/20"
             >
               <PaperclipIcon />
               {attachments.length}
+              <span className="sr-only">
+                {expanded ? ' documents, hide' : ' documents, show'}
+              </span>
             </button>
+          ) : (
+            deliverable.complete && (
+              // Quiet, because a document was never required to tick the box — this reports an
+              // absence, it does not accuse anyone of one.
+              <span className="inline-flex items-center gap-[4px] rounded-lg border border-dashed border-hairline px-8 py-[4px] text-caption text-mist-gray">
+                No document
+              </span>
+            )
           )}
 
           {canAttach && (
@@ -247,7 +264,7 @@ function DeliverableRow({
         </div>
       </div>
 
-      {showDocuments && attachments.length > 0 && (
+      {expanded && attachments.length > 0 && (
         <ul className="mt-12 space-y-[4px] border-t border-hairline pt-12">
           {attachments.map((attachment) => (
             <AttachmentRow

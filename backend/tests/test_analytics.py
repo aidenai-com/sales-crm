@@ -52,38 +52,22 @@ async def test_by_owner_splits_value_per_individual(client: AsyncClient, as_admi
     assert owners["Marcus Rep"]["wonCount"] == 1
 
 
-async def test_by_partner_reports_direct_alongside_partners(
-    client: AsyncClient, as_admin, session, data
-):
+async def test_the_summary_no_longer_reports_by_partner(client: AsyncClient, as_admin):
     """
-    Partner contribution only means something next to the business that arrived without one.
-    """
-    partner = Account(
-        name="Channel Co", industry="Consulting", owner_id=data["marcus"].id, is_partner=True
-    )
-    session.add(partner)
-    await session.flush()
-    session.add(
-        Deal(
-            name="Partner-led", account_id=data["shared"].id, partner_id=partner.id,
-            pipeline_template_id=data["pipeline"].id, stage_id=data["open_stage"].id,
-            value=Decimal("50000"), expected_close_date=date.today() + timedelta(days=30),
-            owner_id=data["marcus"].id,
-        )
-    )
-    await session.commit()
+    Partner reporting was removed with `deals.partner_id`.
 
+    This replaces a test that asserted a by-partner ranking with Direct as its baseline. The split was
+    dropped deliberately rather than re-derived from a deal's partner-side contacts, so the absence is
+    pinned here — otherwise the next person to read the Analytics screen sees a gap and fills it back in.
+    """
     response = await client.get(f"{API}/analytics/summary", headers=as_admin)
-    partners = response.json()["byPartner"]
+    assert response.status_code == 200
+    body = response.json()
 
-    names = [slice_["partnerName"] for slice_ in partners]
-    assert "Channel Co" in names
-    assert "Direct" in names
-    # Direct sorts last regardless of size, so the partner rows read as the chart's subject.
-    assert names[-1] == "Direct"
-
-    channel = next(s for s in partners if s["partnerName"] == "Channel Co")
-    assert Decimal(channel["openValue"]) == Decimal("50000.00")
+    assert "byPartner" not in body
+    # The rankings that survive.
+    assert "byOwner" in body
+    assert "funnel" in body
 
 
 async def test_forecast_groups_open_deals_by_close_month(

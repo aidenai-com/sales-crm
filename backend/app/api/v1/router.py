@@ -4,8 +4,10 @@ from app.api.v1 import (
     accounts,
     activities,
     analytics,
+    assistant,
     auth,
     checklists,
+    contacts,
     dashboard,
     deals,
     pipelines,
@@ -21,8 +23,10 @@ api_router.include_router(deals.router)
 # /deals/{deal_id}/... patterns get a chance to swallow them.
 api_router.include_router(checklists.router)
 api_router.include_router(activities.router)
+api_router.include_router(contacts.router)
 api_router.include_router(reminders.router)
 api_router.include_router(pipelines.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(analytics.router)
 api_router.include_router(team.router)
+api_router.include_router(assistant.router)

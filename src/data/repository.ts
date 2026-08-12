@@ -22,6 +22,10 @@ function seed(): Snapshot {
     people: [...people],
     accounts: [...accounts],
     leads: [...leads],
+    // The seeded repository has no contacts or roles. It backs the fixture-driven tests, which
+    // predate both and assert nothing about them; an empty list is the honest starting state.
+    contacts: [],
+    contactRoles: [],
     deals: deals.map((d) => ({ ...d })),
     activities: activities.map((a) => ({ ...a })),
     // Deep-copied: templates are editable now, so the fixture must not be mutated.
@@ -88,7 +92,7 @@ export function moveDealToStage(dealId: Id, stageId: Id): MoveDealResult {
 }
 
 export type DealPatch = Partial<
-  Pick<Deal, 'name' | 'value' | 'currency' | 'expectedCloseDate' | 'ownerId' | 'stageId' | 'partnerId' | 'leadId'>
+  Pick<Deal, 'name' | 'value' | 'currency' | 'expectedCloseDate' | 'ownerId' | 'stageId' | 'leadId'>
 >
 
 export function updateDeal(dealId: Id, patch: DealPatch): void {
@@ -105,7 +109,7 @@ export function updateAccount(accountId: Id, patch: Partial<Pick<Snapshot['accou
   }
 }
 
-export function updateLead(leadId: Id, patch: Partial<Pick<Snapshot['leads'][number], 'businessUnit' | 'ownerId'>>): void {
+export function updateLead(leadId: Id, patch: Partial<Pick<Snapshot['leads'][number], 'businessUnit'>>): void {
   snapshot = {
     ...snapshot,
     leads: snapshot.leads.map((l) => (l.id === leadId ? { ...l, ...patch } : l)),
@@ -149,18 +153,16 @@ export function duplicateTemplate(pipelineId: Id, name: string): PipelineTemplat
   const copy: PipelineTemplate = {
     id: newId('pipe'),
     name,
-    tracksPartner: source.tracksPartner,
     stages: source.stages.map((stage) => ({ ...stage, id: newId('stage') })),
   }
   snapshot = { ...snapshot, pipelines: [...snapshot.pipelines, copy] }
   return copy
 }
 
-export function createTemplate(name: string, tracksPartner: boolean): PipelineTemplate {
+export function createTemplate(name: string): PipelineTemplate {
   const template: PipelineTemplate = {
     id: newId('pipe'),
     name,
-    tracksPartner,
     // A brand-new pipeline still needs somewhere for deals to land and to finish.
     stages: [
       blankStage('New stage', 10, 1, '#a6bbd1', 'open'),
@@ -184,6 +186,7 @@ function blankStage(
     name,
     shortName: name,
     probability,
+    requiresChampion: false,
     color,
     kind,
     position,

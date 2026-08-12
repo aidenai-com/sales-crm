@@ -20,6 +20,9 @@ export const activityCategory: Record<ActivityKind, ActivityCategory> = {
   note: 'touchpoint',
   document: 'document',
   'stage-change': 'system',
+  // An escalation, not work on the deal. Grouped with the machine-written entries because
+  // like them it records that something happened *to* the deal rather than on it.
+  nudge: 'system',
 }
 
 export const activityKindLabel: Record<ActivityKind, string> = {
@@ -29,6 +32,7 @@ export const activityKindLabel: Record<ActivityKind, string> = {
   note: 'Note',
   document: 'Document',
   'stage-change': 'Stage change',
+  nudge: 'Nudge',
 }
 
 interface CategoryStyle {
@@ -77,4 +81,15 @@ export const categoryStyle: Record<ActivityCategory, CategoryStyle> = {
 
 export function styleForKind(kind: ActivityKind): CategoryStyle {
   return categoryStyle[activityCategory[kind]]
+}
+
+/**
+ * The accessible name for a marker.
+ *
+ * The category is spoken as well as drawn, because the whole point of the grouping is that a
+ * reader can tell a reply from a filed document at a glance — and "at a glance" has to include
+ * the reader who is listening rather than looking.
+ */
+export function markerLabel(kind: ActivityKind): string {
+  return `${activityKindLabel[kind]}, ${categoryStyle[activityCategory[kind]].label.toLowerCase()}`
 }

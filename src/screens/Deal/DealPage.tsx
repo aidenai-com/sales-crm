@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { pendingKey, useStore } from '@/data/store'
+import { assignableOwners } from '@/lib/people'
 import { useSelection } from '@/app/selection'
 import { useAuth } from '@/app/auth'
 import { Link, routes, useRouter } from '@/app/router'
@@ -18,6 +19,7 @@ import { ActivityTimeline } from '@/components/drawers/ActivityTimeline'
 import { StageRail } from './StageRail'
 import { StagePlaybook } from './StagePlaybook'
 import { StageChecklistPanel } from './StageChecklistPanel'
+import { DealPeoplePanel } from './DealPeoplePanel'
 
 /**
  * Full deal view at /deals/:dealId.
@@ -88,8 +90,7 @@ export function DealPage({ dealId }: { dealId: string }) {
     )
   }
 
-  const { deal, account, lead, partner, stage, pipeline } = view
-  const partnerAccounts = snapshot.accounts.filter((a) => a.isPartner)
+  const { deal, account, lead, stage, pipeline } = view
   const weighted = (deal.value * stage.probability) / 100
 
   // Falls back to the deal's own stage: the selection is only ever a stage of this pipeline,
@@ -159,7 +160,6 @@ export function DealPage({ dealId }: { dealId: string }) {
                 </button>
               </>
             )}
-            {partner && ` · via ${partner.name}`}
           </p>
         </div>
 
@@ -226,6 +226,15 @@ export function DealPage({ dealId }: { dealId: string }) {
             />
           )}
 
+          {/* Above the playbook and the timeline: who is on the deal is read far more often than the
+              stage's reference criteria, and it is now the only place a partner appears at all. */}
+          <DealPeoplePanel
+            dealId={deal.id}
+            accountId={account.id}
+            accountName={account.name}
+            canEdit={isAdmin || deal.ownerId === user?.id}
+          />
+
           <StagePlaybook stage={selectedStage} />
 
           <Card>
@@ -254,7 +263,7 @@ export function DealPage({ dealId }: { dealId: string }) {
                   disabled={saving}
                   onChange={(e) => void updateDeal(deal.id, { ownerId: e.target.value })}
                 >
-                  {snapshot.people.map((person) => (
+                  {assignableOwners(snapshot.people, deal.ownerId).map((person) => (
                     <option key={person.id} value={person.id}>
                       {person.name}
                     </option>
@@ -262,23 +271,6 @@ export function DealPage({ dealId }: { dealId: string }) {
                 </Select>
               </Field>
 
-              {/* R8: partner-led deals carry both the partner and the customer. */}
-              {pipeline.tracksPartner && (
-                <Field label="Partner" hint="Sits alongside the customer on the same record.">
-                  <Select
-                    value={deal.partnerId ?? ''}
-                    disabled={saving}
-                    onChange={(e) => void updateDeal(deal.id, { partnerId: e.target.value || null })}
-                  >
-                    <option value="">No partner</option>
-                    {partnerAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
             </div>
           </Card>
 
@@ -287,7 +279,6 @@ export function DealPage({ dealId }: { dealId: string }) {
             <dl className="space-y-8">
               <Fact label="Customer" value={account.name} />
               <Fact label="Industry" value={account.industry} />
-              {pipeline.tracksPartner && <Fact label="Partner" value={partner?.name ?? 'Not set'} />}
               <Fact label="Business unit" value={lead?.businessUnit ?? 'Not tied to a lead'} />
               <Fact label="Owner" value={view.ownerName} />
               <Fact label="Stage probability" value={`${stage.probability}%`} />

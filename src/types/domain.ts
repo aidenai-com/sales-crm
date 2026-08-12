@@ -15,6 +15,11 @@ export interface Person {
   name: string
   initials: string
   role: string
+  /**
+   * Whether they can still sign in. Deactivated people stay in the snapshot so their name resolves on
+   * everything they own and logged; `assignableOwners` is what keeps them out of pickers.
+   */
+  isActive: boolean
 }
 
 /**
@@ -64,6 +69,12 @@ export interface Stage {
   position: number
   /** Soft limit on deals in this stage; the board warns past it. Null means no limit. */
   wipLimit: number | null
+  /**
+   * Whether a deal needs an identified champion — with email, phone and LinkedIn — before it can
+   * enter this stage. Unlike the criteria below, this one is enforced: the API refuses the move
+   * with a 409.
+   */
+  requiresChampion: boolean
   entryCriteria: string[] | null
   exitCriteria: string[] | null
   keyActivities: string[] | null
@@ -81,27 +92,39 @@ export interface Stage {
 export interface PipelineTemplate {
   id: Id
   name: string
-  /** Deals on this pipeline carry a Partner alongside the Customer (R8). */
-  tracksPartner: boolean
   stages: Stage[]
 }
 
-/** Top-level record. Name is the direct customer's name (R1). */
+/**
+ * Top-level record: a company. Not a customer, not a partner — an account.
+ *
+ * There is no `isPartner`, and no partner field anywhere. Being a partner is a property of a *person on
+ * a deal*: a deal's contacts carry roles, and the same company can supply the champion on one deal and
+ * be the end customer on another. The flag this replaced could not express that — setting it removed
+ * the account from the customer tree and every customer picker, so a firm that both resold for us and
+ * bought from us could only be recorded as one of the two.
+ *
+ * An account is only a company: a name, an industry, an owner. Everything that makes it *business* —
+ * its business units, its deals — lives in other tables, so a company filed purely to hold a contact
+ * is a legitimate row here and simply has nothing under it.
+ */
 export interface Account {
   id: Id
   name: string
   industry: string
   ownerId: Id
-  /** Whether this account is a channel partner rather than an end customer. */
-  isPartner: boolean
 }
 
-/** Sits under an account, distinguished by business unit/function, with an owner (R2). */
+/**
+ * Sits under an account, distinguished by business unit or function.
+ *
+ * Has no owner. Only accounts and deals do — a business unit's stewardship follows its account.
+ * The account tree still shows a name at this level; it is the account's owner.
+ */
 export interface Lead {
   id: Id
   accountId: Id
   businessUnit: string
-  ownerId: Id
 }
 
 export interface Deal {
@@ -124,25 +147,143 @@ export interface Deal {
   currency: string
   expectedCloseDate: string
   ownerId: Id
-  /**
-   * Partner-led deals carry both the partner and the customer on the same record (R8).
-   * `accountId` is always the customer; `partnerId` names the partner bringing the deal.
-   */
-  partnerId: Id | null
+  // No `partnerId`. Who else is involved is expressed by the people on the deal: a partner-side
+  // contact attached to it is what "there is a partner here" means. One column could name only one
+  // partner, and named a company rather than somebody to call.
+}
+
+// --- Contacts ----------------------------------------------------------------
+
+/** Which side of a deal a contact sits on. */
+export type ContactType = 'customer' | 'partner'
+
+/**
+ * A person at a customer or a partner — its own object, not a field on an account or a deal.
+ *
+ * Has no owner, like the business unit above.
+ *
+ * `missingDetails` names which of email, phone and LinkedIn are blank. Those three are exactly what
+ * the champion gate demands, so the gap is shown wherever a contact is shown rather than only at the
+ * point a stage move is refused.
+ */
+export interface Contact {
+  id: Id
+  createdAt: string
+  accountId: Id
+  accountName: string
+  fullName: string
+  email: string
+  phone: string
+  linkedinUrl: string
+  designation: string
+  contactType: ContactType
+  /** Distinct deals this person is attached to, in any role. */
+  dealCount: number
+  missingDetails: string[]
+}
+
+/**
+ * What a person can be on a deal.
+ *
+ * Rows rather than a fixed union, because which roles exist is the user's decision. `key` is the
+ * stable handle: `champion` is the one the application reasons about, and an admin renaming it to
+ * "Advocate" must not disable the stage gate.
+ */
+export interface ContactRole {
+  id: Id
+  key: string
+  name: string
+  position: number
+  /** Built in — cannot be deleted, and its key never changes. Champion only. */
+  isSystem: boolean
+}
+
+/**
+ * One contact on a deal, in a role or not yet in one.
+ *
+ * `roleId` is null while nobody has worked out what this person is on this deal — the normal state
+ * just after someone is pulled in from the directory. The three role fields are null together.
+ */
+export interface DealContact {
+  id: Id
+  contactId: Id
+  roleId: Id | null
+  roleKey: string | null
+  roleName: string | null
+  fullName: string
+  email: string
+  phone: string
+  linkedinUrl: string
+  designation: string
+  contactType: ContactType
+  accountId: Id
+  accountName: string
+  missingDetails: string[]
+}
+
+/** A contact, optionally already in a role, as sent when creating a deal or attaching someone later. */
+export interface DealContactAssignment {
+  contactId: Id
+  roleId: Id | null
+}
+
+/**
+ * A role a deal tracks, and how many people currently fill it.
+ *
+ * `filledCount` of zero is the interesting case: a role the deal needs and nobody has been found for.
+ * That state is the reason roles are tracked separately from the people rather than derived from them.
+ */
+export interface DealRole {
+  id: Id
+  roleId: Id
+  roleKey: string
+  roleName: string
+  position: number
+  filledCount: number
+}
+
+/** Everything the deal page needs about who is involved: roles tracked, and people attached. */
+export interface DealPeople {
+  roles: DealRole[]
+  contacts: DealContact[]
+}
+
+/**
+ * A possible duplicate, surfaced while someone types a new account name.
+ *
+ * `reason` says how the match was found and `blocksCreation` whether it is fatal, so the form can
+ * distinguish "this is the same company, you cannot file it twice" from "this looks similar, have a
+ * look". Inferring severity from `score` alone would conflate the two.
+ */
+export interface SimilarAccount {
+  id: Id
+  name: string
+  industry: string
+  ownerName: string
+  score: number
+  reason: 'exact' | 'normalized' | 'prefix' | 'fuzzy'
+  blocksCreation: boolean
 }
 
 export type ActivitySubjectType = 'account' | 'lead' | 'deal'
 
-export type ActivityKind = 'call' | 'meeting' | 'email' | 'note' | 'stage-change' | 'document'
+export type ActivityKind =
+  | 'call'
+  | 'meeting'
+  | 'email'
+  | 'note'
+  | 'stage-change'
+  | 'document'
+  | 'nudge'
 
 /**
  * The kinds a person can log by hand.
  *
- * `stage-change` and `document` are excluded on purpose: the server writes both — one when a
- * deal moves, the other when a file is filed against or removed from a deliverable. Offering
- * either in the log-activity form would let someone record an event that never happened.
+ * `stage-change`, `document` and `nudge` are excluded on purpose: the server writes all three —
+ * when a deal moves, when a file is filed against a deliverable, and when an admin chases an
+ * owner. Offering any of them here would let someone record an event that never happened.
  */
-export type LoggableActivityKind = Exclude<ActivityKind, 'stage-change' | 'document'>
+export type LoggableActivityKind = Exclude<ActivityKind, 'stage-change' | 'document' | 'nudge'>
 
 /**
  * One activity shape logs against accounts, leads, and deals (R4). A polymorphic
@@ -166,6 +307,8 @@ export interface Snapshot {
   deals: Deal[]
   activities: Activity[]
   pipelines: PipelineTemplate[]
+  contacts: Contact[]
+  contactRoles: ContactRole[]
 }
 
 // --- Deal checklists and documents -------------------------------------------
@@ -303,16 +446,6 @@ export interface OwnerSlice {
   wonValue: number
 }
 
-export interface PartnerSlice {
-  /** Null on the "Direct" row, which is included so partner value has something to sit beside. */
-  partnerId: Id | null
-  partnerName: string
-  openCount: number
-  openValue: number
-  wonCount: number
-  wonValue: number
-}
-
 export interface ForecastSlice {
   /** First day of the close month, for stable sorting. */
   month: string
@@ -336,7 +469,6 @@ export interface OutcomeMix {
 export interface AnalyticsFilters {
   pipelineId: Id | null
   ownerId: Id | null
-  partnerId: Id | null
   closeFrom: string | null
   closeTo: string | null
   dealCount: number
@@ -346,7 +478,6 @@ export interface AnalyticsSummary {
   filters: AnalyticsFilters
   funnel: StageSlice[]
   byOwner: OwnerSlice[]
-  byPartner: PartnerSlice[]
   forecast: ForecastSlice[]
   outcomes: OutcomeMix
   totalOpenValue: number

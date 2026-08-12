@@ -8,9 +8,13 @@ does not offer actions that will fail, but this module is the boundary that matt
 The model, as agreed:
 
   Admin   sees and changes everything.
-  Rep     sees deals and leads they own, plus the accounts those hang off so the
-          hierarchy still resolves. Moves and edits only their own deals. Never changes
-          who owns a deal, and never creates or deletes an account.
+  Rep     sees every account, every business unit, and the deals they own. Creates accounts,
+          business units and deals, always assigned to themselves. Moves and edits only their
+          own deals. Never changes who owns a record, and never deletes an account.
+
+Reads and writes are scoped differently on purpose: see everything, change what you own. Account
+visibility is company-wide because a rep who cannot see another rep's Citibank is the rep who
+creates a second Citibank; account *editing* is still the owner's.
 """
 
 import uuid
@@ -32,41 +36,30 @@ def forbid(detail: str) -> HTTPException:
 # --- Read scoping ------------------------------------------------------------
 
 
-def visible_account_ids(user_id: uuid.UUID) -> Select:
-    """
-    Accounts a rep is allowed to see.
-
-    Ownership of the account is not the only route in. A rep who owns a deal under Bank
-    of America must see Bank of America, or that deal has a parent it cannot resolve and
-    the account tree breaks. Partner accounts named on their deals are included for the
-    same reason — the board renders the partner's name.
-    """
-    return select(Account.id).where(
-        or_(
-            Account.owner_id == user_id,
-            Account.id.in_(select(Lead.account_id).where(Lead.owner_id == user_id)),
-            Account.id.in_(select(Deal.account_id).where(Deal.owner_id == user_id)),
-            Account.id.in_(
-                select(Deal.partner_id).where(
-                    Deal.owner_id == user_id, Deal.partner_id.is_not(None)
-                )
-            ),
-        )
-    )
-
-
 def scope_accounts(stmt: Select, user: User) -> Select:
-    if is_admin(user):
-        return stmt
-    return stmt.where(Account.id.in_(visible_account_ids(user.id)))
+    """
+    Every account, to everybody.
+
+    This used to be a union of four routes in — accounts you own, accounts your leads sit under,
+    accounts your deals sit under, and partners named on your deals — because a rep who owned a deal
+    under Bank of America had to see Bank of America or the account tree had a parent it could not
+    resolve. All of that is subsumed: the whole book is visible, so every parent resolves.
+
+    Kept as a function rather than deleted at the call sites. It is the one place to narrow account
+    visibility again, and a no-op here is a one-line change where re-threading scoping through eight
+    call sites is not.
+    """
+    return stmt
 
 
 def scope_leads(stmt: Select, user: User) -> Select:
-    # Strictly owned. A rep who owns the *account* still does not see another rep's lead
-    # under it — that is what "view only their respective leads" means.
-    if is_admin(user):
-        return stmt
-    return stmt.where(Lead.owner_id == user.id)
+    """
+    Every business unit, to everybody.
+
+    Not a separate decision. Business units no longer carry an owner, so there is nothing on the row
+    to scope by, and their account is visible to everyone — the two approved changes compose to this.
+    """
+    return stmt
 
 
 def scope_deals(stmt: Select, user: User) -> Select:
@@ -79,17 +72,23 @@ def scope_activities(stmt: Select, user: User) -> Select:
     """
     An activity is visible when its subject is.
 
-    Authorship is deliberately not a route in: a rep who logged a call against a deal that
-    has since been reassigned should no longer see it, because they can no longer see the
-    deal it describes.
+    Which now means account-level and business-unit-level activity is visible to every rep, following
+    their subjects. A visible record whose history is hidden is a half-open door — the timeline would
+    show gaps a rep could neither read nor explain.
+
+    Deal activity stays owner-scoped, because deals were never made company-wide. This is where the
+    commercially sensitive detail sits, so it is the one level that still narrows.
+
+    Authorship is deliberately not a route in: a rep who logged a call against a deal that has since
+    been reassigned should no longer see it, because they can no longer see the deal it describes.
     """
     if is_admin(user):
         return stmt
     return stmt.where(
         or_(
             Activity.deal_id.in_(select(Deal.id).where(Deal.owner_id == user.id)),
-            Activity.lead_id.in_(select(Lead.id).where(Lead.owner_id == user.id)),
-            Activity.account_id.in_(visible_account_ids(user.id)),
+            Activity.lead_id.is_not(None),
+            Activity.account_id.is_not(None),
         )
     )
 
@@ -112,9 +111,16 @@ def require_deal_owner(user: User, deal: Deal, action: str = "change this deal")
 
 
 def require_lead_owner(user: User, lead: Lead, action: str = "change this business unit") -> None:
-    if is_admin(user) or lead.owner_id == user.id:
+    """
+    Delegates to the account, which is where a business unit's ownership now lives.
+
+    The name is kept because every call site reads correctly with it — "require the owner of this
+    lead" is still exactly what is being asked, only the answer comes from one table further up.
+    Requires `lead.account` to be loaded.
+    """
+    if is_admin(user) or lead.account.owner_id == user.id:
         return
-    raise forbid(f"You can only {action} if you own it")
+    raise forbid(f"You can only {action} if you own the account")
 
 
 def require_account_owner(user: User, account: Account, action: str = "change this account") -> None:

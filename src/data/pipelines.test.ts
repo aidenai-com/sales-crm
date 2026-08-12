@@ -131,7 +131,7 @@ describe('deleteStage', () => {
   })
 
   it('never leaves a pipeline with no stages', () => {
-    const template = createTemplate('Solo', false)
+    const template = createTemplate('Solo')
     // Empty the new template down to its last stage.
     for (const stage of template.stages.slice(1)) deleteStage(template.id, stage.id)
 
@@ -198,15 +198,14 @@ describe('duplicateTemplate', () => {
 
 describe('createTemplate', () => {
   it('starts with an open stage plus won and lost outcomes', () => {
-    const template = createTemplate('Reseller', true)
+    const template = createTemplate('Reseller')
 
-    expect(template.tracksPartner).toBe(true)
     expect(template.stages.map((s) => s.kind)).toEqual(['open', 'won', 'lost'])
     expect(template.stages.map((s) => s.position)).toEqual([1, 2, 3])
   })
 
   it('adds the template to the snapshot so boards can render it immediately', () => {
-    const template = createTemplate('Reseller', true)
+    const template = createTemplate('Reseller')
     expect(getSnapshot().pipelines.some((p) => p.id === template.id)).toBe(true)
   })
 })

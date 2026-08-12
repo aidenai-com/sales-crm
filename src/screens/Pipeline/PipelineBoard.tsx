@@ -53,8 +53,7 @@ export function PipelineBoard() {
       (v) =>
         v.deal.name.toLowerCase().includes(q) ||
         v.account.name.toLowerCase().includes(q) ||
-        v.ownerName.toLowerCase().includes(q) ||
-        (v.partner?.name.toLowerCase().includes(q) ?? false),
+        v.ownerName.toLowerCase().includes(q),
     )
   }, [views, pipeline, query])
 

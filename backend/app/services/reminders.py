@@ -20,8 +20,9 @@ from sqlalchemy.orm import joinedload
 
 from app.core import permissions
 from app.core.config import settings
-from app.models import Activity, Deal, Lead, Reminder, Stage, StageKind, User
+from app.models import Account, Activity, Deal, Lead, Reminder, Stage, StageKind, User
 from app.schemas.reminder import ReminderInbox, ReminderRead, StaleLeadNudge
+from app.services import health
 from app.services.notifications import Notification, get_notifier
 
 logger = logging.getLogger("app.reminders")
@@ -133,9 +134,12 @@ async def stale_leads(
     # Latest touch per lead, from either route, as correlated scalar subqueries. Postgres'
     # GREATEST ignores NULL arguments, so a lead touched through only one of the two routes
     # still reports that timestamp, and NULL survives only when neither route has anything.
+    # Nudges are excluded from both routes: chasing a quiet lead must not make it look worked,
+    # or the nudge would remove the lead from this very list. See health.NON_TOUCH_KINDS.
     direct = (
         select(func.max(Activity.occurred_at))
         .where(Activity.lead_id == Lead.id)
+        .where(Activity.kind.notin_(health.NON_TOUCH_KINDS))
         .correlate(Lead)
         .scalar_subquery()
     )
@@ -143,6 +147,7 @@ async def stale_leads(
         select(func.max(Activity.occurred_at))
         .join(Deal, Deal.id == Activity.deal_id)
         .where(Deal.lead_id == Lead.id)
+        .where(Activity.kind.notin_(health.NON_TOUCH_KINDS))
         .correlate(Lead)
         .scalar_subquery()
     )
@@ -159,7 +164,9 @@ async def stale_leads(
 
     stmt = (
         select(Lead, last_touch.label("last_touch"), open_deal_count.label("open_deals"))
-        .options(joinedload(Lead.account), joinedload(Lead.owner))
+        # The account's owner, through the account: a business unit has no owner of its own, so the
+        # person to chase about a quiet one is whoever holds the company relationship.
+        .options(joinedload(Lead.account).joinedload(Account.owner))
         # A lead created moments ago has no activity yet, and is not neglected. Creation
         # counts as a touch, exactly as it does in health derivation.
         .where(Lead.created_at <= cutoff)
@@ -182,8 +189,8 @@ async def stale_leads(
                 business_unit=lead.business_unit,
                 account_id=lead.account_id,
                 account_name=lead.account.name,
-                owner_id=lead.owner_id,
-                owner_name=lead.owner.full_name,
+                owner_id=lead.account.owner_id,
+                owner_name=lead.account.owner.full_name,
                 last_activity_at=last,
                 days_quiet=max(0, (now - reference).days),
                 open_deal_count=int(open_deals),

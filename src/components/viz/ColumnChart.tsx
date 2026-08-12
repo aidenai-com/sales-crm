@@ -8,9 +8,14 @@ import { SERIES_FILL, type SeriesSlot } from './primitives'
  * The category here is a close month, and a reader expects time to run left to right. Every
  * other breakdown on this screen is named categories and uses horizontal rows instead.
  *
- * Two columns per month rather than one stacked one: weighted value is not a *part* of open
- * value, it is the same money multiplied by a probability. Stacking them would draw a total
- * that is the sum of a figure and a discounted copy of itself, which is not a quantity.
+ * Never *stacked*: weighted value is the same money multiplied by a probability, so stacking
+ * would draw a total that is the sum of a figure and a discounted copy of itself, which is not
+ * a quantity anyone should read off a chart.
+ *
+ * `nested` is not stacking, and is the default here. The outer column's height stays open
+ * value, and the weighted column is drawn inside it — so no false total appears, and the
+ * relationship the reader sees is the true one: this fraction of that. `grouped` remains for
+ * two genuinely independent measures, where neither contains the other.
  */
 
 export interface Column {
@@ -29,10 +34,54 @@ interface Point {
 
 const PLOT_HEIGHT = 180
 
-export function ColumnChart({ columns, valueLabel }: { columns: Column[]; valueLabel: string }) {
+/**
+ * One column whose height is the containing value, with its part drawn inside.
+ *
+ * The inner column is narrower and shares the baseline, so the two read as one measurement
+ * with a portion marked rather than as two adjacent quantities. Both stay in the same series
+ * hue at two opacities — a second hue would say "different thing", and it is the same money.
+ */
+function NestedColumn({ column, max }: { column: Column; max: number }) {
+  const outer = column.values[0]
+  const inner = column.values[1]
+  if (!outer) return null
+
+  const outerPercent = Math.max((outer.value / max) * 100, 1)
+  const innerPercent = outer.value > 0 && inner ? (inner.value / outer.value) * 100 : 0
+
+  return (
+    <div
+      className="flex w-24 items-end justify-center rounded-t-md bg-viz-1/35"
+      style={{ height: `${outerPercent}%` }}
+    >
+      <div
+        className="w-16 rounded-t-[3px] bg-viz-1"
+        style={{ height: `${innerPercent}%` }}
+      />
+    </div>
+  )
+}
+
+export function ColumnChart({
+  columns,
+  valueLabel,
+  mode = 'grouped',
+}: {
+  columns: Column[]
+  valueLabel: string
+  /** `nested` expects exactly two values per column: the container first, its part second. */
+  mode?: 'grouped' | 'nested'
+}) {
   const [hover, setHover] = useState<Point | null>(null)
 
-  const max = Math.max(1, ...columns.flatMap((column) => column.values.map((v) => v.value)))
+  // Nested columns are measured against the containing value alone. Including the inner value
+  // in the scale would be measuring the same money twice.
+  const max = Math.max(
+    1,
+    ...columns.flatMap((column) =>
+      mode === 'nested' ? [column.values[0]?.value ?? 0] : column.values.map((v) => v.value),
+    ),
+  )
 
   return (
     <div className="relative">
@@ -51,15 +100,19 @@ export function ColumnChart({ columns, valueLabel }: { columns: Column[]; valueL
               className="flex h-full min-w-[56px] flex-1 flex-col justify-end rounded-lg px-8 pt-8 transition-colors duration-hover ease-ui hover:bg-cloud"
             >
               <div className="flex h-full items-end justify-center gap-[2px]">
-                {column.values.map((value) => (
-                  <div
-                    key={value.slot}
-                    className={cn('w-16 rounded-t-md', SERIES_FILL[value.slot])}
-                    // A zero month still gets a hairline of fill, so an empty month reads as
-                    // "nothing closes here" rather than as a gap in the chart.
-                    style={{ height: `${Math.max((value.value / max) * 100, 1)}%` }}
-                  />
-                ))}
+                {mode === 'nested' ? (
+                  <NestedColumn column={column} max={max} />
+                ) : (
+                  column.values.map((value) => (
+                    <div
+                      key={value.slot}
+                      className={cn('w-16 rounded-t-md', SERIES_FILL[value.slot])}
+                      // A zero month still gets a hairline of fill, so an empty month reads as
+                      // "nothing closes here" rather than as a gap in the chart.
+                      style={{ height: `${Math.max((value.value / max) * 100, 1)}%` }}
+                    />
+                  ))
+                )}
               </div>
             </li>
           ))}
@@ -78,6 +131,7 @@ export function ColumnChart({ columns, valueLabel }: { columns: Column[]; valueL
       {hover && (
         <div
           role="presentation"
+
           className="pointer-events-none fixed z-50 min-w-[180px] rounded-xl border border-hairline bg-paper p-16 shadow-sm-2"
           style={{ left: hover.x + 16, top: hover.y + 16 }}
         >

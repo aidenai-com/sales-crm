@@ -99,6 +99,7 @@ export function ChartPanel({
   title,
   subtitle,
   series = [],
+  legend,
   table,
   action,
   children,
@@ -106,6 +107,14 @@ export function ChartPanel({
   title: string
   subtitle?: string
   series?: Series[]
+  /**
+   * A legend that is not two series slots.
+   *
+   * The nested open/weighted encoding is one series drawn twice at different opacities, so
+   * `series` cannot describe it — but it still needs a text key, for the same reason any
+   * other chart here does. Takes precedence over `series` when both are somehow passed.
+   */
+  legend?: ReactNode
   table: ReactNode
   action?: ReactNode
   children: ReactNode
@@ -132,10 +141,8 @@ export function ChartPanel({
         </div>
       </div>
 
-      {series.length > 0 && (
-        <div className="mt-16">
-          <Legend series={series} />
-        </div>
+      {(legend ?? series.length > 0) && (
+        <div className="mt-16">{legend ?? <Legend series={series} />}</div>
       )}
 
       <div className="mt-24">{showTable ? table : children}</div>

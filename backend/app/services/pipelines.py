@@ -76,6 +76,7 @@ async def add_stage(db: AsyncSession, template: PipelineTemplate, payload: Stage
         color=payload.color,
         kind=payload.kind,
         wip_limit=payload.wip_limit,
+        requires_champion=payload.requires_champion,
         entry_criteria=payload.entry_criteria,
         exit_criteria=payload.exit_criteria,
         key_activities=payload.key_activities,
@@ -200,6 +201,11 @@ async def reassign_deals(
     """
     Bulk-moves every deal out of one stage so the stage can then be deleted, logging the
     change against each deal. Refuses a target in a different pipeline.
+
+    Deliberately does not apply the champion gate, unlike `move_deal_to_stage`. This is an
+    administrator emptying a stage in order to remove it, not a rep advancing a deal: a gate here
+    would make a stage undeletable because some deal in it lacks a champion, and would leave the
+    admin no way out except editing every deal first.
     """
     if from_stage.pipeline_template_id != to_stage.pipeline_template_id:
         raise CrossPipelineMove
@@ -226,7 +232,7 @@ async def reassign_deals(
 
 async def duplicate_template(db: AsyncSession, source: PipelineTemplate, name: str) -> PipelineTemplate:
     """Stages are copied with fresh ids so the two templates never share stage records."""
-    copy = PipelineTemplate(name=name, tracks_partner=source.tracks_partner)
+    copy = PipelineTemplate(name=name)
     db.add(copy)
     await db.flush()
 
@@ -240,6 +246,7 @@ async def duplicate_template(db: AsyncSession, source: PipelineTemplate, name: s
             kind=stage.kind,
             position=stage.position,
             wip_limit=stage.wip_limit,
+            requires_champion=stage.requires_champion,
             entry_criteria=stage.entry_criteria,
             exit_criteria=stage.exit_criteria,
             key_activities=stage.key_activities,
@@ -264,9 +271,9 @@ DEFAULT_STAGES: tuple[tuple[str, int, str, StageKind], ...] = (
 )
 
 
-async def create_template(db: AsyncSession, name: str, tracks_partner: bool) -> PipelineTemplate:
+async def create_template(db: AsyncSession, name: str) -> PipelineTemplate:
     """A new pipeline still needs somewhere for deals to land and to finish."""
-    template = PipelineTemplate(name=name, tracks_partner=tracks_partner)
+    template = PipelineTemplate(name=name)
     db.add(template)
     await db.flush()
 
@@ -290,13 +297,26 @@ async def create_template(db: AsyncSession, name: str, tracks_partner: bool) -> 
 
 async def move_deal_to_stage(db: AsyncSession, deal: Deal, stage: Stage, actor_id: uuid.UUID) -> bool:
     """
-    v1 advancement is a plain manual move — no exit-criteria gating (spec 6.4), even
-    though every stage carries its criteria.
+    Advancement is a plain manual move — no exit-criteria gating (spec 6.4), even though every stage
+    carries its criteria — with one exception: a stage marked `requires_champion` will not accept a
+    deal that has not identified one.
+
+    That check lives here rather than in the endpoint so both routes to a stage change are covered:
+    `POST /deals/{id}/stage` from the board, and the `stage_id` inside `PATCH /deals/{id}`. A gate on
+    one of the two would be a gate on neither.
+
+    Raises `contact_service.ChampionRequired`, which the API turns into a 409 — the caller has
+    permission, the deal is simply not ready. Imported inside the function because
+    `services.contacts` imports the repositories, and importing it at module scope closes a cycle.
     """
     if stage.pipeline_template_id != deal.pipeline_template_id:
         raise CrossPipelineMove
     if deal.stage_id == stage.id:
         return False
+
+    from app.services import contacts as contact_service
+
+    await contact_service.assert_champion_ready(db, deal.id, stage)
 
     deal.stage_id = stage.id
     db.add(

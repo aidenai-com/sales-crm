@@ -42,7 +42,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
         type: 'account',
         id: account.id,
         title: account.name,
-        context: account.isPartner ? 'Partner' : `Account · ${account.industry}`,
+        context: account.industry ? `Account · ${account.industry}` : 'Account',
         trailing: '',
       })
     }
@@ -63,7 +63,10 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
       const matches =
         view.deal.name.toLowerCase().includes(q) ||
         view.ownerName.toLowerCase().includes(q) ||
-        (view.partner?.name.toLowerCase().includes(q) ?? false)
+        // The partner used to be searchable here through `deal.partnerId`. Who else is involved now
+        // lives in the deal's contacts, which the snapshot does not carry per deal — so searching by
+        // partner name would need a fetch per keystroke. Deliberately dropped rather than faked.
+        view.account.name.toLowerCase().includes(q)
       if (!matches) continue
       results.push({
         type: 'deal',

@@ -1,13 +1,7 @@
 import type { Activity } from '@/types/domain'
 import { timeAgo } from '@/lib/format'
-
-const kindLabel: Record<Activity['kind'], string> = {
-  call: 'Call',
-  meeting: 'Meeting',
-  email: 'Email',
-  note: 'Note',
-  'stage-change': 'Stage change',
-}
+import { activityKindLabel } from '@/lib/activityCategory'
+import { ActivityMarker } from '@/components/ui/ActivityMarker'
 
 export function ActivityTimeline({
   activities,
@@ -29,12 +23,14 @@ export function ActivityTimeline({
       {activities.map((activity) => (
         <li key={activity.id} className="flex gap-16">
           <div className="flex flex-col items-center pt-8">
-            <span className="size-8 shrink-0 rounded-full bg-signal-blue" aria-hidden="true" />
+            <ActivityMarker kind={activity.kind} className="mt-0" />
             <span className="mt-8 w-px flex-1 bg-hairline" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1 pb-8">
             <div className="flex flex-wrap items-baseline gap-8">
-              <span className="text-body-sm font-semibold text-ink-navy">{kindLabel[activity.kind]}</span>
+              <span className="text-body-sm font-semibold text-ink-navy">
+                {activityKindLabel[activity.kind]}
+              </span>
               <span className="text-caption text-slate-gray">
                 {authorName(activity.authorId)} · {timeAgo(activity.occurredAt)}
               </span>

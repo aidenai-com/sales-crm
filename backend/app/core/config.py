@@ -60,6 +60,43 @@ class Settings(BaseSettings):
     smtp_from: str = "crm@example.invalid"
     smtp_use_tls: bool = True
 
+    # AI assistant. Chosen the same way SMTP is: a blank key falls back to a provider that
+    # explains itself instead of answering, so the drawer, the streaming transport, the tool
+    # dispatch and the usage dashboard are all exercisable before any credentials exist.
+    assistant_enabled: bool = True
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-5-nano"
+    #: Ceiling per reply. Small on purpose: this answers questions about a pipeline, and an
+    #: assistant that can emit an essay costs more and gets read less.
+    assistant_max_output_tokens: int = 800
+
+    #: Sent as `reasoning_effort`, and only when non-empty.
+    #:
+    #: Must be "none" for the reasoning models on /v1/chat/completions: that endpoint refuses
+    #: function tools and reasoning in the same request, and this assistant is built on tools, so
+    #: tools win. Anything else produces
+    #:
+    #:     Function tools with reasoning_effort are not supported for <model> in
+    #:     /v1/chat/completions. To use function tools, use /v1/responses or set
+    #:     reasoning_effort to 'none'.
+    #:
+    #: Set to an empty string for a model that has no reasoning setting at all — those reject the
+    #: parameter as unknown rather than ignoring it.
+    openai_reasoning_effort: str = "none"
+    #: How many tool round-trips one question may take before the answer is forced. Without a
+    #: cap a model that keeps calling tools bills indefinitely for a single question.
+    assistant_max_tool_rounds: int = 4
+
+    #: USD per million tokens, for the usage dashboard.
+    #:
+    #: Zero by default and deliberately not guessed: published prices change, and a dashboard
+    #: reporting a confidently wrong cost is worse than one reporting none. Set these from
+    #: OpenAI's current pricing page and the dashboard starts costing usage; until then it shows
+    #: token counts and says the rate is unset.
+    openai_input_cost_per_1m: float = 0.0
+    openai_output_cost_per_1m: float = 0.0
+
     log_sql: bool = Field(default=False, description="Echo SQL statements to stdout.")
 
     @property
@@ -82,6 +119,15 @@ class Settings(BaseSettings):
     def smtp_configured(self) -> bool:
         """Whether real email can be sent. See `app.services.notifications`."""
         return bool(self.smtp_host.strip())
+
+    @property
+    def assistant_configured(self) -> bool:
+        """Whether the assistant can reach a model. See `app.services.assistant.provider`."""
+        return bool(self.openai_api_key.strip())
+
+    @property
+    def assistant_pricing_configured(self) -> bool:
+        return self.openai_input_cost_per_1m > 0 or self.openai_output_cost_per_1m > 0
 
 
 @lru_cache

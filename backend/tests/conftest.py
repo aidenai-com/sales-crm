@@ -24,7 +24,10 @@ from app.db.session import get_db
 from app.main import app
 from app.models import (
     Account,
+    Contact,
+    ContactRole,
     Deal,
+    DealContact,
     Lead,
     PipelineTemplate,
     Stage,
@@ -110,7 +113,7 @@ async def data(session: AsyncSession) -> dict:
     session.add_all([admin, priya, marcus])
     await session.flush()
 
-    pipeline = PipelineTemplate(name="Direct", tracks_partner=False)
+    pipeline = PipelineTemplate(name="Direct")
     session.add(pipeline)
     await session.flush()
 
@@ -139,16 +142,49 @@ async def data(session: AsyncSession) -> dict:
     session.add_all([first_deliverable, second_deliverable])
     await session.flush()
 
-    # Marcus owns the account; Priya owns work inside it. This is the case that decides
-    # whether the account tree resolves for Priya.
-    shared = Account(name="Shared Bank", industry="Banking", owner_id=marcus.id, is_partner=False)
-    marcus_only = Account(name="Marcus Only", industry="Insurance", owner_id=marcus.id, is_partner=False)
+    # Marcus owns both accounts; Priya owns a deal inside `shared`. That combination used to decide
+    # whether the account tree resolved for Priya at all — accounts are now visible to everyone, so it
+    # instead exercises the rule that survived: she sees the accounts, and only her own deals.
+    shared = Account(name="Shared Bank", industry="Banking", owner_id=marcus.id)
+    marcus_only = Account(name="Marcus Only", industry="Insurance", owner_id=marcus.id)
     session.add_all([shared, marcus_only])
     await session.flush()
 
-    priya_lead = Lead(account_id=shared.id, business_unit="Priya Unit", owner_id=priya.id)
-    marcus_lead = Lead(account_id=shared.id, business_unit="Marcus Unit", owner_id=marcus.id)
+    # No owner on either. Business units lost `owner_id` in migration f0a4e79c2b13; both of these now
+    # belong to Marcus by virtue of him owning `shared`. The names are kept as-is so the tests that
+    # reference them still read, but "Priya Unit" no longer means Priya can see it and nobody else can
+    # — every rep sees every business unit.
+    priya_lead = Lead(account_id=shared.id, business_unit="Priya Unit")
+    marcus_lead = Lead(account_id=shared.id, business_unit="Marcus Unit")
     session.add_all([priya_lead, marcus_lead])
+    await session.flush()
+
+    # Roles are seeded by migration b8e13d5a06c7, and this suite builds its schema with
+    # `create_all` — so the seed has to be repeated here. Only the two the tests exercise: the champion,
+    # whose `key` the stage gate matches on, and one ordinary role to prove the gate ignores it.
+    champion_role = ContactRole(key=ContactRole.CHAMPION, name="Champion", position=1, is_system=True)
+    sponsor_role = ContactRole(key="executive-sponsor", name="Executive Sponsor", position=2)
+    session.add_all([champion_role, sponsor_role])
+
+    # One complete contact and one deliberately incomplete, which is what lets a test tell "no champion"
+    # apart from "champion who cannot be reached" — the gate reports those differently.
+    complete_contact = Contact(
+        account_id=shared.id,
+        full_name="Priya Contact",
+        email="contact@sharedbank.example",
+        phone="+44 20 7946 0958",
+        linkedin_url="linkedin.com/in/priyacontact",
+        designation="Head of Platform",
+        contact_type="customer",
+    )
+    incomplete_contact = Contact(
+        account_id=shared.id,
+        full_name="Reachless Rita",
+        email="rita@sharedbank.example",
+        designation="Director",
+        contact_type="customer",
+    )
+    session.add_all([complete_contact, incomplete_contact])
     await session.flush()
 
     def deal(name: str, owner: User, lead: Lead | None, account: Account, stage: Stage) -> Deal:
@@ -163,6 +199,15 @@ async def data(session: AsyncSession) -> dict:
     marcus_deal = deal("Marcus Deal", marcus, marcus_lead, shared, open_stage)
     marcus_other = deal("Marcus Other", marcus, None, marcus_only, won_stage)
     session.add_all([priya_deal, marcus_deal, marcus_other])
+    await session.flush()
+
+    # Priya's deal has a contact but no champion, which is the state most deals start in and the one the
+    # gate has to refuse with "identify one" rather than "fill in their phone number".
+    session.add(
+        DealContact(
+            deal_id=priya_deal.id, contact_id=complete_contact.id, role_id=sponsor_role.id
+        )
+    )
     await session.commit()
 
     return {
@@ -172,6 +217,8 @@ async def data(session: AsyncSession) -> dict:
         "first_deliverable": first_deliverable, "second_deliverable": second_deliverable,
         "shared": shared, "marcus_only": marcus_only,
         "priya_lead": priya_lead, "marcus_lead": marcus_lead,
+        "champion_role": champion_role, "sponsor_role": sponsor_role,
+        "complete_contact": complete_contact, "incomplete_contact": incomplete_contact,
         "priya_deal": priya_deal, "marcus_deal": marcus_deal, "marcus_other": marcus_other,
     }
 
@@ -213,3 +260,30 @@ async def as_marcus(client: AsyncClient) -> dict[str, str]:
 @pytest_asyncio.fixture
 async def as_admin(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {await token_for(client, 'admin@example.com')}"}
+
+
+def deal_payload(data: dict, *, name: str = "New Deal", owner=None, stage=None) -> dict:
+    """
+    A valid `POST /deals` body.
+
+    Exists because `contacts` became required and is non-obvious to construct — without a shared
+    helper, every new deal-creation test starts with a 422 and a few minutes of confusion. Defaults to
+    Priya, the first open stage, and one non-champion contact, which is the ordinary case.
+    """
+    return {
+        "name": name,
+        "accountId": str(data["shared"].id),
+        "leadId": None,
+        "partnerId": None,
+        "pipelineTemplateId": str(data["pipeline"].id),
+        "stageId": str((stage or data["open_stage"]).id),
+        "value": "1000",
+        "expectedCloseDate": "2027-01-01",
+        "ownerId": str((owner or data["priya"]).id),
+        "contacts": [
+            {
+                "contactId": str(data["complete_contact"].id),
+                "roleId": str(data["sponsor_role"].id),
+            }
+        ],
+    }

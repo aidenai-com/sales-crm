@@ -70,11 +70,24 @@ export function dealHealth(deal: Deal, activities: Activity[], now: number = Dat
   return dealHealthDetail(deal, activities, now).health
 }
 
+/**
+ * Activity kinds that are recorded but do not count as working the deal.
+ *
+ * Mirrors `health.NON_TOUCH_KINDS` on the server, and must stay in step with it or the badge
+ * this file renders will contradict the health the API derives.
+ *
+ * Only `nudge`, and the reason is circular if you get it wrong: an admin nudges a deal *because*
+ * it has gone quiet. If the nudge counted as a touch, the at-risk flag would clear the instant it
+ * was raised and the chase would erase its own cause.
+ */
+export const NON_TOUCH_KINDS: ReadonlySet<Activity['kind']> = new Set(['nudge'])
+
 /** Most recent activity timestamp for a deal, or null when it has never been touched. */
 export function lastActivityAt(dealId: string, activities: Activity[]): number | null {
   let latest: number | null = null
   for (const activity of activities) {
     if (activity.subjectType !== 'deal' || activity.subjectId !== dealId) continue
+    if (NON_TOUCH_KINDS.has(activity.kind)) continue
     const at = new Date(activity.occurredAt).getTime()
     if (latest === null || at > latest) latest = at
   }

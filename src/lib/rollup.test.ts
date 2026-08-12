@@ -21,17 +21,14 @@ describe('buildDealViews', () => {
     expect(buildDealViews(snap)).toHaveLength(snap.deals.length)
   })
 
-  it('resolves the partner on partner-led deals and leaves it null on direct deals (R8)', () => {
+  it('resolves the customer on every deal', () => {
+    // Was "resolves the partner on partner-led deals". A deal has no partner field: who else is involved
+    // is expressed by the people attached to it, which a `DealView` does not carry — the deal page fetches
+    // them per deal. So the only company a view resolves is the customer.
     const views = buildDealViews(snapshot())
-    const partnerLed = views.filter((v) => v.pipeline.tracksPartner && v.deal.partnerId)
-    expect(partnerLed.length).toBeGreaterThan(0)
-    for (const view of partnerLed) {
-      expect(view.partner).not.toBeNull()
-      // Both fields live on the same record: partner is never the customer.
-      expect(view.partner?.id).not.toBe(view.account.id)
-    }
-    for (const view of views.filter((v) => !v.pipeline.tracksPartner)) {
-      expect(view.partner).toBeNull()
+    expect(views.length).toBeGreaterThan(0)
+    for (const view of views) {
+      expect(view.account.id).toBe(view.deal.accountId)
     }
   })
 
@@ -119,7 +116,7 @@ describe('highPriorityDeals', () => {
 describe('bucketByStage', () => {
   it('returns every stage in position order, including empty ones', () => {
     const snap = snapshot()
-    const direct = snap.pipelines.find((p) => !p.tracksPartner)!
+    const direct = snap.pipelines.find((p) => p.name === 'AidenAI Direct')!
     const views = buildDealViews(snap).filter((v) => v.pipeline.id === direct.id)
     const buckets = bucketByStage(direct, views)
 
@@ -129,7 +126,7 @@ describe('bucketByStage', () => {
   })
 
   it('seeds the six AidenAI stages with their published probabilities', () => {
-    const direct = snapshot().pipelines.find((p) => !p.tracksPartner)!
+    const direct = snapshot().pipelines.find((p) => p.name === 'AidenAI Direct')!
     const open = direct.stages.filter((s) => s.kind !== 'lost')
     expect(open.map((s) => s.probability)).toEqual([5, 15, 30, 55, 75, 100])
     expect(open.map((s) => s.name)).toEqual([
@@ -149,14 +146,14 @@ describe('bucketByStage', () => {
     }
   })
 
-  it('includes an onboarding stage on the partner pipeline (R7)', () => {
-    const partner = snapshot().pipelines.find((p) => p.tracksPartner)!
-    expect(partner.stages.map((s) => s.name)).toContain('Onboarding')
+  it('includes an onboarding stage on the co-sell pipeline (R7)', () => {
+    const coSell = snapshot().pipelines.find((p) => p.name === 'Partner Co-Sell')!
+    expect(coSell.stages.map((s) => s.name)).toContain('Onboarding')
   })
 
   it('sums stage value from its own deals only', () => {
     const snap = snapshot()
-    const direct = snap.pipelines.find((p) => !p.tracksPartner)!
+    const direct = snap.pipelines.find((p) => p.name === 'AidenAI Direct')!
     const views = buildDealViews(snap).filter((v) => v.pipeline.id === direct.id)
     for (const bucket of bucketByStage(direct, views)) {
       expect(bucket.value).toBe(bucket.views.reduce((sum, v) => sum + v.deal.value, 0))
@@ -175,11 +172,13 @@ describe('rollUp', () => {
 })
 
 describe('buildTree', () => {
-  it('excludes partner accounts from the top level', () => {
+  it('includes every account at the top level', () => {
+    // Was "excludes partner accounts". Accounts no longer carry a partner flag — being a partner is a
+    // property of a deal — so an account that has only ever been named as a partner still appears here,
+    // with no deals of its own.
     const snap = snapshot()
     const tree = buildTree(snap, buildDealViews(snap))
-    expect(tree.every((node) => !node.account.isPartner)).toBe(true)
-    expect(tree).toHaveLength(snap.accounts.filter((a) => !a.isPartner).length)
+    expect(tree).toHaveLength(snap.accounts.length)
   })
 
   it('places deals with no lead under the account directly', () => {
@@ -236,13 +235,16 @@ describe('filterTree', () => {
     expect(result.length).toBeGreaterThan(0)
   })
 
-  it('matches deals by partner name', () => {
+  it('matches deals by customer name', () => {
+    // Was "matches deals by partner name". Searching by partner is gone with the column: who else is
+    // involved lives in a deal's contacts, which the tree does not carry, so matching on it would need a
+    // fetch per keystroke. Dropped deliberately rather than faked — see the note in `filterTree`.
     const snap = snapshot()
     const tree = buildTree(snap, buildDealViews(snap))
-    const result = filterTree(tree, 'accenture')
+    const result = filterTree(tree, 'jpmorgan')
     const matched = result.flatMap((n) => [...n.leads.flatMap((l) => l.deals), ...n.directDeals])
     expect(matched.length).toBeGreaterThan(0)
-    expect(matched.every((d) => d.view.partner?.name === 'Accenture')).toBe(true)
+    expect(matched.every((d) => d.view.account.name === 'JPMorgan Chase')).toBe(true)
   })
 
   it('returns nothing for a query that matches nothing', () => {

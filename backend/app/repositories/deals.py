@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core import permissions
 from app.models import Activity, Deal, Stage, User
+from app.services import health
 
 
 def _with_relations(stmt: Select) -> Select:
@@ -15,7 +16,6 @@ def _with_relations(stmt: Select) -> Select:
     """
     return stmt.options(
         joinedload(Deal.account),
-        joinedload(Deal.partner),
         joinedload(Deal.lead),
         joinedload(Deal.stage),
         joinedload(Deal.pipeline),
@@ -73,6 +73,9 @@ async def last_activity_map(db: AsyncSession) -> dict[uuid.UUID, object]:
     stmt = (
         select(Activity.deal_id, func.max(Activity.occurred_at))
         .where(Activity.deal_id.is_not(None))
+        # An admin's nudge is recorded on the timeline but is not work on the deal, so it must
+        # not clear the staleness it was raised about. See health.NON_TOUCH_KINDS.
+        .where(Activity.kind.notin_(health.NON_TOUCH_KINDS))
         .group_by(Activity.deal_id)
     )
     result = await db.execute(stmt)

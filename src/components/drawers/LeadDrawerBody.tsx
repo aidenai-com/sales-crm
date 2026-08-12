@@ -5,9 +5,10 @@ import { useSelection } from '@/app/selection'
 import { buildDealViews, rollUp } from '@/lib/rollup'
 import { compactMoney, relativeToNow } from '@/lib/format'
 import { HealthBadge, HealthDot } from '@/components/ui/Badge'
-import { Field, Select, TextInput } from '@/components/ui/Field'
+import { Field, TextInput } from '@/components/ui/Field'
 import { ActivityLogForm } from './ActivityLogForm'
 import { ActivityTimeline } from './ActivityTimeline'
+import { NudgeButton } from './NudgeButton'
 
 export function LeadDrawerBody({ leadId }: { leadId: string }) {
   const { snapshot, updateLead, isPending } = useStore()
@@ -23,6 +24,8 @@ export function LeadDrawerBody({ leadId }: { leadId: string }) {
     [snapshot.activities, leadId],
   )
 
+  // Still used by the business-unit field's disabled state below, even though the owner select that
+  // also read it is gone.
   const saving = isPending(pendingKey.lead(leadId))
   const unitField = useDebouncedCommit(lead?.businessUnit ?? '', (businessUnit) =>
     updateLead(leadId, { businessUnit }),
@@ -32,6 +35,12 @@ export function LeadDrawerBody({ leadId }: { leadId: string }) {
 
   const account = snapshot.accounts.find((a) => a.id === lead.accountId)
   const summary = rollUp(leadViews)
+
+  const ownerName = (id: string) =>
+    snapshot.people.find((person) => person.id === id)?.name ?? 'the owner'
+
+  // Read through the account: a business unit has no owner column any more.
+  const accountOwnerName = account ? ownerName(account.ownerId) : 'Unassigned'
 
   return (
     <div className="space-y-24">
@@ -46,22 +55,15 @@ export function LeadDrawerBody({ leadId }: { leadId: string }) {
         <Field label="Business unit">
           <TextInput
             value={unitField.value}
+            disabled={saving}
             onChange={(e) => unitField.onChange(e.target.value)}
             onBlur={unitField.onBlur}
           />
         </Field>
-        <Field label="Owner">
-          <Select
-            value={lead.ownerId}
-            disabled={saving}
-            onChange={(e) => void updateLead(lead.id, { ownerId: e.target.value })}
-          >
-            {snapshot.people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
-          </Select>
+        {/* No owner control. A business unit's stewardship follows its account, so the person
+            accountable is shown as text and changed on the account itself. */}
+        <Field label="Account owner">
+          <p className="px-12 py-8 text-body-sm text-slate-gray">{accountOwnerName}</p>
         </Field>
       </div>
 
@@ -77,11 +79,16 @@ export function LeadDrawerBody({ leadId }: { leadId: string }) {
           </p>
         ) : (
           <ul className="space-y-8">
+            {/* Each row is a flex container rather than one big button: the nudge is a second
+                action on the same row, and a button cannot legally contain another. */}
             {leadViews.map((view) => (
-              <li key={view.deal.id}>
+              <li
+                key={view.deal.id}
+                className="flex items-center gap-8 rounded-lg border border-hairline pr-8 transition-colors hover:bg-pebble"
+              >
                 <button
                   onClick={() => select({ type: 'deal', id: view.deal.id })}
-                  className="flex w-full items-center gap-16 rounded-lg border border-hairline px-16 py-8 text-left transition-colors hover:bg-pebble"
+                  className="flex min-w-0 flex-1 items-center gap-16 px-16 py-8 text-left"
                 >
                   <HealthDot health={view.health} detail={view.healthDetail} />
                   <span className="min-w-0 flex-1">
@@ -96,6 +103,14 @@ export function LeadDrawerBody({ leadId }: { leadId: string }) {
                     {compactMoney(view.deal.value)}
                   </span>
                 </button>
+                {/* On the row, so an admin working down a list of at-risk deals can act without
+                    opening each one. */}
+                <NudgeButton
+                  dealId={view.deal.id}
+                  ownerId={view.deal.ownerId}
+                  ownerName={ownerName(view.deal.ownerId)}
+                  detail={view.healthDetail}
+                />
               </li>
             ))}
           </ul>

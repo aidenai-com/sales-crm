@@ -10,6 +10,7 @@ import { TopNav } from '@/components/layout/TopNav'
 import { SearchOverlay } from '@/components/layout/SearchOverlay'
 import { RecordDrawer } from '@/components/drawers/RecordDrawer'
 import { CreateDrawer } from '@/components/create/CreateDrawer'
+import { AssistantDrawer } from '@/components/assistant/AssistantDrawer'
 import { ActivityBar } from '@/components/ui/ActivityBar'
 import { ErrorBanner } from '@/components/ui/ErrorBanner'
 import { Spinner } from '@/components/ui/Spinner'
@@ -18,9 +19,13 @@ import { Dashboard } from '@/screens/Dashboard/Dashboard'
 import { Analytics } from '@/screens/Analytics/Analytics'
 import { PipelineBoard } from '@/screens/Pipeline/PipelineBoard'
 import { AccountExplorer } from '@/screens/Accounts/AccountExplorer'
+import { ContactsIndex } from '@/screens/Contacts/ContactsIndex'
 import { DealsIndex } from '@/screens/Deals/DealsIndex'
 import { DealPage } from '@/screens/Deal/DealPage'
 import { PipelineSettings } from '@/screens/Settings/PipelineSettings'
+import { AiUsage } from '@/screens/Settings/AiUsage'
+import { Team } from '@/screens/Settings/Team'
+import { Profile } from '@/screens/Settings/Profile'
 import { NotFound } from '@/screens/NotFound'
 import { Landing } from '@/screens/Landing/Landing'
 import { Login } from '@/screens/Login/Login'
@@ -37,12 +42,20 @@ function Screen() {
       return <PipelineBoard />
     case 'accounts':
       return <AccountExplorer />
+    case 'contacts':
+      return <ContactsIndex />
     case 'deals':
       return <DealsIndex />
     case 'deal':
       return <DealPage dealId={match.params.dealId} />
     case 'pipelines':
       return <PipelineSettings />
+    case 'aiUsage':
+      return <AiUsage />
+    case 'team':
+      return <Team />
+    case 'profile':
+      return <Profile />
     default:
       return <NotFound />
   }
@@ -56,6 +69,7 @@ function Screen() {
 function Workspace() {
   const { busy, error, clearError, status, loadError, refresh } = useStore()
   const [searchOpen, setSearchOpen] = useState(false)
+  const [assistantOpen, setAssistantOpen] = useState(false)
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -73,7 +87,10 @@ function Workspace() {
   if (status === 'error') {
     return (
       <>
-        <TopNav onOpenSearch={() => setSearchOpen(true)} />
+        <TopNav
+          onOpenSearch={() => setSearchOpen(true)}
+          onOpenAssistant={() => setAssistantOpen(true)}
+        />
         <main className="mx-auto max-w-page px-24 py-96">
           <div className="mx-auto max-w-[520px] rounded-3xl border border-hairline bg-paper p-32 text-center shadow-sm">
             <h1 className="text-subheading font-bold text-ink-navy">Could not load your data</h1>
@@ -89,7 +106,10 @@ function Workspace() {
 
   return (
     <>
-      <TopNav onOpenSearch={() => setSearchOpen(true)} />
+      <TopNav
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenAssistant={() => setAssistantOpen(true)}
+      />
       <ActivityBar active={busy} />
       <ErrorBanner message={error} onDismiss={clearError} />
 
@@ -100,6 +120,7 @@ function Workspace() {
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       <RecordDrawer />
       <CreateDrawer />
+      <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </>
   )
 }

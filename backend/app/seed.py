@@ -25,7 +25,11 @@ from app.models import (
     Account,
     Activity,
     ActivityKind,
+    Contact,
+    ContactRole,
     Deal,
+    DealContact,
+    DealRole,
     Lead,
     PipelineTemplate,
     Reminder,
@@ -34,7 +38,17 @@ from app.models import (
     User,
     UserRole,
 )
-from app.seed_data import ACCOUNTS, ACTIVITIES, DEALS, LEADS, PIPELINES, USERS
+from app.seed_data import (
+    ACCOUNTS,
+    ACTIVITIES,
+    CONTACT_ROLES,
+    CONTACTS,
+    DEAL_PEOPLE,
+    DEALS,
+    LEADS,
+    PIPELINES,
+    USERS,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("seed")
@@ -53,8 +67,13 @@ async def wipe(db: AsyncSession) -> None:
     Completions and attachments are not listed: both cascade from deals, which are deleted
     here. `StageDeliverable` cascades from `Stage` for the same reason. Reminders do not
     cascade from anything deleted before them, so they go first explicitly.
+
+    `DealRole` and `DealContact` are listed even though both cascade from `Deal`, because both also hold
+    a RESTRICT foreign key to `ContactRole` — so deleting the roles would be refused while any mapping
+    survived, and the order below is what makes that work. `ContactRole` itself is *not* wiped: it is
+    seeded by migration and is configuration rather than demo data.
     """
-    for model in (Reminder, Activity, Deal, Lead, StageDeliverable, Stage, PipelineTemplate, Account, User):
+    for model in (Reminder, Activity, DealContact, DealRole, Deal, Contact, Lead, StageDeliverable, Stage, PipelineTemplate, Account, User):
         await db.execute(delete(model))
     await db.flush()
     logger.info("Cleared existing CRM data")
@@ -97,8 +116,8 @@ async def seed(db: AsyncSession) -> None:
     templates: dict[str, PipelineTemplate] = {}
     stages: dict[tuple[str, str], Stage] = {}
 
-    for name, tracks_partner, stage_defs in PIPELINES:
-        template = PipelineTemplate(name=name, tracks_partner=tracks_partner)
+    for name, stage_defs in PIPELINES:
+        template = PipelineTemplate(name=name)
         db.add(template)
         await db.flush()
         templates[name] = template
@@ -133,11 +152,10 @@ async def seed(db: AsyncSession) -> None:
 
     # --- Accounts and leads --------------------------------------------------
     accounts: dict[str, Account] = {}
-    for key, name, industry, is_partner, owner_email in ACCOUNTS:
+    for key, name, industry, owner_email in ACCOUNTS:
         account = Account(
             name=name,
             industry=industry,
-            is_partner=is_partner,
             owner_id=users[owner_email].id,
         )
         db.add(account)
@@ -146,11 +164,11 @@ async def seed(db: AsyncSession) -> None:
     await db.flush()
 
     leads: dict[str, Lead] = {}
-    for key, account_key, business_unit, owner_email in LEADS:
+    for key, account_key, business_unit in LEADS:
+        # No owner. A business unit's stewardship follows its account — see migration f0a4e79c2b13.
         lead = Lead(
             account_id=accounts[account_key].id,
             business_unit=business_unit,
-            owner_id=users[owner_email].id,
         )
         db.add(lead)
         leads[key] = lead
@@ -170,7 +188,6 @@ async def seed(db: AsyncSession) -> None:
         value,
         days_until_close,
         owner_email,
-        partner_key,
     ) in DEALS:
         deal = Deal(
             name=name,
@@ -181,7 +198,6 @@ async def seed(db: AsyncSession) -> None:
             created_at=now - timedelta(days=150),
             account_id=accounts[account_key].id,
             lead_id=leads[lead_key].id if lead_key else None,
-            partner_id=accounts[partner_key].id if partner_key else None,
             pipeline_template_id=templates[pipeline_name].id,
             stage_id=stages[(pipeline_name, stage_name)].id,
             value=Decimal(value),
@@ -194,6 +210,74 @@ async def seed(db: AsyncSession) -> None:
 
     await db.flush()
     logger.info("Seeded %d deals", len(deals))
+
+    # --- Contact roles -------------------------------------------------------
+    #
+    # Upserted by key rather than inserted. Migration b8e13d5a06c7 already seeded these, so a plain
+    # insert would collide on `uq_contact_roles_key` on any database that has been migrated — which is
+    # every database except one built by `create_all`.
+    roles: dict[str, ContactRole] = {
+        role.key: role for role in (await db.execute(select(ContactRole))).scalars()
+    }
+    for key, role_name, position, is_system in CONTACT_ROLES:
+        if key not in roles:
+            role = ContactRole(key=key, name=role_name, position=position, is_system=is_system)
+            db.add(role)
+            roles[key] = role
+    await db.flush()
+
+    # --- Contacts ------------------------------------------------------------
+    contacts: dict[str, Contact] = {}
+    for (
+        key,
+        account_key,
+        full_name,
+        designation,
+        email,
+        phone,
+        linkedin,
+        side,
+    ) in CONTACTS:
+        contact = Contact(
+            account_id=accounts[account_key].id,
+            full_name=full_name,
+            designation=designation,
+            email=email,
+            phone=phone,
+            linkedin_url=linkedin,
+            contact_type=side,
+        )
+        db.add(contact)
+        contacts[key] = contact
+
+    await db.flush()
+    logger.info("Seeded %d contacts", len(contacts))
+
+    # --- Deal roles and their mappings ---------------------------------------
+    role_slots = 0
+    mappings = 0
+    for deal_key, extra_roles, people in DEAL_PEOPLE:
+        deal = deals[deal_key]
+
+        # Every role named on a person is tracked, plus any listed as still being looked for. Without
+        # the union, a deal could show somebody under a heading absent from its own list of roles.
+        tracked = {role_key for _, role_key in people if role_key} | set(extra_roles)
+        for role_key in tracked:
+            db.add(DealRole(deal_id=deal.id, role_id=roles[role_key].id))
+            role_slots += 1
+
+        for contact_key, role_key in people:
+            db.add(
+                DealContact(
+                    deal_id=deal.id,
+                    contact_id=contacts[contact_key].id,
+                    role_id=roles[role_key].id if role_key else None,
+                )
+            )
+            mappings += 1
+
+    await db.flush()
+    logger.info("Seeded %d tracked roles and %d deal contacts", role_slots, mappings)
 
     # --- Activities ----------------------------------------------------------
     subject_lookup = {"account": accounts, "lead": leads, "deal": deals}

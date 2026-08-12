@@ -9,7 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
-from tests.conftest import token_for
+from tests.conftest import deal_payload, token_for
 
 API = settings.api_v1_prefix
 pytestmark = pytest.mark.asyncio
@@ -32,33 +32,59 @@ async def test_admin_sees_every_deal(client: AsyncClient, as_admin):
     assert names == {"Priya Deal", "Marcus Deal", "Marcus Other"}
 
 
-async def test_rep_sees_the_parent_account_of_a_deal_they_own(client: AsyncClient, as_priya):
+async def test_rep_sees_every_account(client: AsyncClient, as_priya):
     """
-    Priya does not own Shared Bank — Marcus does — but she owns a deal under it. Without
-    this the deal would have a parent she cannot resolve and the tree breaks.
+    Accounts are company-wide.
+
+    Priya owns neither Shared Bank nor Marcus Only, and sees both. This inverts what this test used to
+    assert — that she saw only accounts her own work hung off — and the reason for the change is
+    duplicate prevention: a rep who cannot see another rep's Citibank is the rep who creates a second
+    Citibank.
     """
     response = await client.get(f"{API}/accounts", headers=as_priya)
     names = {a["name"] for a in response.json()}
 
     assert "Shared Bank" in names
-    assert "Marcus Only" not in names
+    assert "Marcus Only" in names
 
 
-async def test_rep_sees_only_their_own_leads_even_inside_a_shared_account(
-    client: AsyncClient, as_priya
-):
+async def test_rep_sees_every_business_unit(client: AsyncClient, as_priya):
+    """
+    Business units follow their accounts, so they are company-wide too.
+
+    Not an independent decision: they no longer carry an owner to scope by, and their accounts are
+    visible to everyone. "Priya Unit" and "Marcus Unit" are names left over from when this mattered.
+    """
     response = await client.get(f"{API}/leads", headers=as_priya)
     units = {lead["businessUnit"] for lead in response.json()}
-    assert units == {"Priya Unit"}
+    assert units == {"Priya Unit", "Marcus Unit"}
 
 
-async def test_account_tree_is_scoped(client: AsyncClient, as_priya):
+async def test_account_tree_shows_every_account_but_only_your_own_deals(
+    client: AsyncClient, as_priya
+):
+    """
+    The line that still holds: structure is shared, deals are not.
+
+    Priya sees both accounts and both business units, and inside them only Priya Deal. This is the
+    single most important assertion in the suite after the change — it is what stops "accounts are
+    visible to everyone" from quietly becoming "everything is".
+    """
     response = await client.get(f"{API}/accounts/tree", headers=as_priya)
     tree = response.json()
 
-    assert [node["name"] for node in tree] == ["Shared Bank"]
-    assert [lead["businessUnit"] for lead in tree[0]["leads"]] == ["Priya Unit"]
-    assert {d["name"] for lead in tree[0]["leads"] for d in lead["deals"]} == {"Priya Deal"}
+    assert [node["name"] for node in tree] == ["Marcus Only", "Shared Bank"]
+
+    shared = next(node for node in tree if node["name"] == "Shared Bank")
+    assert {lead["businessUnit"] for lead in shared["leads"]} == {"Priya Unit", "Marcus Unit"}
+
+    every_deal = {
+        deal["name"]
+        for node in tree
+        for lead in node["leads"]
+        for deal in lead["deals"]
+    } | {deal["name"] for node in tree for deal in node["directDeals"]}
+    assert every_deal == {"Priya Deal"}
 
 
 async def test_reading_another_reps_deal_is_404_not_403(client: AsyncClient, as_priya, data):
@@ -67,9 +93,26 @@ async def test_reading_another_reps_deal_is_404_not_403(client: AsyncClient, as_
     assert response.status_code == 404
 
 
-async def test_reading_an_invisible_account_is_404(client: AsyncClient, as_priya, data):
+async def test_reading_someone_elses_account_succeeds(client: AsyncClient, as_priya, data):
+    """
+    Was a 404. Every account is readable now, so hiding one would be inventing a rule the list
+    endpoint does not follow — and a record you can see in a list but not open is a bug, not a policy.
+    """
     response = await client.get(f"{API}/accounts/{data['marcus_only'].id}", headers=as_priya)
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json()["name"] == "Marcus Only"
+
+
+async def test_rep_still_cannot_edit_an_account_they_do_not_own(
+    client: AsyncClient, as_priya, data
+):
+    """Reads opened up; writes did not. This is the pair that makes "see everything, change your own" true."""
+    response = await client.patch(
+        f"{API}/accounts/{data['marcus_only'].id}",
+        headers=as_priya,
+        json={"industry": "Rewritten"},
+    )
+    assert response.status_code == 403
 
 
 async def test_dashboard_is_scoped_to_the_caller(client: AsyncClient, as_priya, as_admin):
@@ -131,14 +174,29 @@ async def test_rep_cannot_create_a_deal_owned_by_someone_else(client: AsyncClien
     response = await client.post(
         f"{API}/deals",
         headers=as_priya,
-        json={
-            "name": "Sneaky", "accountId": str(data["shared"].id), "leadId": None,
-            "partnerId": None, "pipelineTemplateId": str(data["pipeline"].id),
-            "stageId": str(data["open_stage"].id), "value": "1000",
-            "expectedCloseDate": "2027-01-01", "ownerId": str(data["marcus"].id),
-        },
+        json=deal_payload(data, name="Sneaky", owner=data["marcus"]),
     )
     assert response.status_code == 403
+
+
+async def test_the_api_accepts_a_deal_with_no_contacts(client: AsyncClient, as_priya, data):
+    """
+    Contacts are required by the create form, not by this endpoint.
+
+    Two reasons the schema does not enforce it. A `min_length=1` would make Pydantic reject the payload
+    *before* the ownership check ran, turning the 403 above into a 422 — a permission error reported as a
+    validation error. And it would break every existing caller with no compatibility window.
+
+    So this documents a deliberate gap rather than an oversight: the rule lives in `CreateDealForm`, which
+    disables its submit button, and in `store.createDeal`, which refuses the call. A script or an
+    integration can still create a contactless deal, and nothing here will stop it.
+    """
+    payload = deal_payload(data, name="Nobody") | {"contacts": []}
+    response = await client.post(f"{API}/deals", headers=as_priya, json=payload)
+    assert response.status_code == 201
+
+    people = await client.get(f"{API}/deals/{response.json()['id']}/contacts", headers=as_priya)
+    assert people.json() == []
 
 
 async def test_admin_can_reassign(client: AsyncClient, as_admin, data):
@@ -154,12 +212,54 @@ async def test_admin_can_reassign(client: AsyncClient, as_admin, data):
 # --- Creation rights ---------------------------------------------------------
 
 
-async def test_rep_cannot_create_an_account(client: AsyncClient, as_priya, data):
+async def test_rep_can_create_an_account_they_own(client: AsyncClient, as_priya, data):
+    """Any authorized user may file a company. Was admin-only."""
     response = await client.post(
         f"{API}/accounts",
         headers=as_priya,
-        json={"name": "New Co", "industry": "Tech", "isPartner": False,
-              "ownerId": str(data["priya"].id)},
+        json={"name": "New Co", "industry": "Tech", "ownerId": str(data["priya"].id)},
+    )
+    assert response.status_code == 201
+
+
+async def test_the_creator_becomes_the_owner(client: AsyncClient, as_priya, data):
+    """
+    `ownerId` may be omitted, and then it is the caller.
+
+    Filing a company is almost always done by the person who will work it, so the form no longer asks.
+    An administrator can hand it over afterwards.
+    """
+    response = await client.post(
+        f"{API}/accounts", headers=as_priya, json={"name": "Mine By Default", "industry": "Tech"}
+    )
+    assert response.status_code == 201
+    assert response.json()["ownerId"] == str(data["priya"].id)
+
+
+async def test_the_removed_partner_flag_is_rejected_not_ignored(
+    client: AsyncClient, as_priya
+):
+    """
+    `PayloadModel` sets `extra="forbid"`, so a client still sending `isPartner` gets a 422 rather than
+    having it silently dropped. Recorded because it is a breaking change for any caller outside this
+    app — and because loud is the behaviour worth keeping.
+    """
+    response = await client.post(
+        f"{API}/accounts",
+        headers=as_priya,
+        json={"name": "Old Client", "industry": "Tech", "isPartner": True},
+    )
+    assert response.status_code == 422
+
+
+async def test_rep_cannot_create_an_account_owned_by_someone_else(
+    client: AsyncClient, as_priya, data
+):
+    """The guard that replaced admin-only: create freely, but assigned to yourself."""
+    response = await client.post(
+        f"{API}/accounts",
+        headers=as_priya,
+        json={"name": "Not Mine", "industry": "Tech", "ownerId": str(data["marcus"].id)},
     )
     assert response.status_code == 403
 
@@ -168,8 +268,7 @@ async def test_admin_can_create_an_account(client: AsyncClient, as_admin, data):
     response = await client.post(
         f"{API}/accounts",
         headers=as_admin,
-        json={"name": "New Co", "industry": "Tech", "isPartner": False,
-              "ownerId": str(data["priya"].id)},
+        json={"name": "New Co", "industry": "Tech", "ownerId": str(data["priya"].id)},
     )
     assert response.status_code == 201
 
@@ -178,21 +277,16 @@ async def test_rep_can_create_a_lead_and_a_deal_they_own(client: AsyncClient, as
     lead = await client.post(
         f"{API}/leads",
         headers=as_priya,
-        json={"accountId": str(data["shared"].id), "businessUnit": "New Unit",
-              "ownerId": str(data["priya"].id)},
+        # No `ownerId`: a business unit has no owner. Sent, it would be ignored rather than rejected,
+        # so its absence here is the assertion.
+        json={"accountId": str(data["shared"].id), "businessUnit": "New Unit"},
     )
     assert lead.status_code == 201
 
     deal = await client.post(
         f"{API}/deals",
         headers=as_priya,
-        json={
-            "name": "My Deal", "accountId": str(data["shared"].id),
-            "leadId": lead.json()["id"], "partnerId": None,
-            "pipelineTemplateId": str(data["pipeline"].id),
-            "stageId": str(data["open_stage"].id), "value": "5000",
-            "expectedCloseDate": "2027-01-01", "ownerId": str(data["priya"].id),
-        },
+        json=deal_payload(data, name="My Deal") | {"leadId": lead.json()["id"]},
     )
     assert deal.status_code == 201
 
@@ -284,14 +378,24 @@ async def test_admin_creates_a_user_who_can_then_sign_in(client: AsyncClient, as
     assert signin.status_code == 200
 
 
-async def test_a_new_rep_starts_with_an_empty_scope(client: AsyncClient, as_admin):
+async def test_a_new_rep_starts_with_no_deals_but_the_whole_account_book(
+    client: AsyncClient, as_admin
+):
+    """
+    A rep who owns nothing sees no deals and every account.
+
+    This test previously asserted an empty scope for both, and the split is the point of the change:
+    somebody joining on their first morning can see who the company already sells to — which is what
+    stops them filing a second Citibank — while the pipeline stays owned.
+    """
     await client.post(f"{API}/auth/users", headers=as_admin, json=_new_user())
     token = await token_for(client, "new.rep@example.com", "startpw12345")
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Owning nothing means seeing nothing — the scoping rule with no special-casing.
     assert (await client.get(f"{API}/deals", headers=headers)).json() == []
-    assert (await client.get(f"{API}/accounts", headers=headers)).json() == []
+
+    accounts = (await client.get(f"{API}/accounts", headers=headers)).json()
+    assert {a["name"] for a in accounts} == {"Shared Bank", "Marcus Only"}
 
 
 async def test_duplicate_email_is_rejected(client: AsyncClient, as_admin):

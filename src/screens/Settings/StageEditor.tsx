@@ -33,7 +33,14 @@ export interface StageEditorProps {
   /** Drag affordance supplied by the sortable wrapper. */
   handle: ReactNode
   dragging: boolean
-  onPatch: (patch: Partial<Pick<Stage, 'name' | 'shortName' | 'probability' | 'color' | 'kind' | 'wipLimit'>>) => void
+  onPatch: (
+    patch: Partial<
+      Pick<
+        Stage,
+        'name' | 'shortName' | 'probability' | 'color' | 'kind' | 'wipLimit' | 'requiresChampion'
+      >
+    >,
+  ) => void
   onDelete: () => Promise<{ deleted: boolean; reason?: string; message?: string }>
   onReassign: (toStageId: string) => Promise<void>
 }
@@ -116,6 +123,7 @@ export function StageEditor({
             {stage.probability}% · {KINDS.find((k) => k.id === stage.kind)?.label} · {dealCount}{' '}
             {dealCount === 1 ? 'deal' : 'deals'}
             {stage.wipLimit !== null && ` · limit ${stage.wipLimit}`}
+            {stage.requiresChampion && ' · champion required'}
           </span>
         </button>
 
@@ -181,6 +189,29 @@ export function StageEditor({
               />
             </Field>
           </div>
+
+          {/* The only enforced gate in the app. Everything else on a stage is either reporting
+              configuration or reference content nothing checks, so it is set apart rather than sitting
+              in the grid of numbers above. */}
+          <label className="mt-16 flex cursor-pointer items-start gap-8 rounded-lg border border-hairline bg-cloud p-16">
+            <input
+              type="checkbox"
+              checked={stage.requiresChampion}
+              disabled={readOnly}
+              onChange={(e) => onPatch({ requiresChampion: e.target.checked })}
+              className="mt-[2px] size-16 shrink-0 rounded-md accent-signal-blue"
+            />
+            <span>
+              <span className="block text-body-sm font-semibold text-ink-navy">
+                Needs a champion to enter
+              </span>
+              <span className="mt-[2px] block text-caption text-slate-gray">
+                A deal cannot move into this stage until somebody on it holds the Champion role with
+                their email, phone and LinkedIn recorded. Leave this off for your first stage —
+                qualification is where a champion has not been found yet.
+              </span>
+            </span>
+          </label>
 
           <div className="mt-16">
             <Field label="Counts as" hint="Only Open stages count toward pipeline value and forecasts.">
