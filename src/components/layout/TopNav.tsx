@@ -132,27 +132,37 @@ export function TopNav({
             </kbd>
           </button>
 
-          {/* The one filled control in the header.
-              Every other action up here is an icon in slate — search, theme, settings — because they
-              are utilities you already know are there. This is new, so it carries the badge fill and
-              its own word. A spark alone would be a fifth grey glyph nobody clicks. */}
-          <button
-            onClick={onOpenAssistant}
-            title="Ask about your pipeline"
-            className={cn(
-              LABELLED,
-              'border border-signal-blue/25 bg-badge-fill font-semibold text-signal-blue',
-              'hover:border-signal-blue hover:bg-signal-blue hover:text-paper',
-            )}
-          >
-            <SparkIcon />
-            <span className="hidden sm:inline">Ask AI</span>
-          </button>
+          {/* Administrators only.
+              The assistant answers across the whole book — "which deals are at risk", "what is in
+              Qualify" — and a rep asking it should not be able to read past their own scope. The server
+              already scopes every tool call to the caller, so this is not the security boundary; it is
+              the honest one. Offering a rep a control that answers a narrower question than it appears
+              to is worse than not offering it, and hiding it here means they never learn to reach for
+              something that will not serve them.
+
+              The one filled control in the header. Every other action up here is an icon in slate —
+              search, theme, settings — because they are utilities you already know are there. This is
+              new, so it carries the badge fill and its own word. A spark alone would be a fifth grey
+              glyph nobody clicks. */}
+          {isAdmin && (
+            <button
+              onClick={onOpenAssistant}
+              title="Ask about your pipeline"
+              className={cn(
+                LABELLED,
+                'border border-signal-blue/25 bg-badge-fill font-semibold text-signal-blue',
+                'hover:border-signal-blue hover:bg-signal-blue hover:text-paper',
+              )}
+            >
+              <SparkIcon />
+              <span className="hidden sm:inline">Ask AI</span>
+            </button>
+          )}
 
           {/* A hairline, not a gap, between the labelled actions and the icon utilities. Spacing alone
               would need to be wide enough to read as a break, which would push the utilities away from
-              the edge they belong to. */}
-          <span aria-hidden className="mx-8 h-24 w-px shrink-0 bg-hairline" />
+              the edge they belong to. Only drawn when there is something on both sides of it. */}
+          {isAdmin && <span aria-hidden className="mx-8 h-24 w-px shrink-0 bg-hairline" />}
 
           <div className="flex items-center gap-[2px]">
             {/* Only the classes it lacks. ThemeToggle already renders 32px and `rounded-lg`, and `cn`

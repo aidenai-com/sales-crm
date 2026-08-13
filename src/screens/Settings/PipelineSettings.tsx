@@ -9,6 +9,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import type { NewStage } from '@/api/endpoints'
 import { pendingKey, useStore } from '@/data/store'
 import { useAuth } from '@/app/auth'
 import { useDebouncedCommit } from '@/hooks/useDebouncedCommit'
@@ -41,6 +42,7 @@ export function PipelineSettings() {
   const { isAdmin } = useAuth()
 
   const [activeId, setActiveId] = useState('')
+  const [addingStage, setAddingStage] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -161,17 +163,26 @@ export function PipelineSettings() {
               <h2 className="text-body-lg font-semibold text-ink-navy">
                 Stages <span className="text-body-sm font-medium text-mist-gray">{ordered.length}</span>
               </h2>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={store.isPending(pendingKey.pipeline(pipeline.id))}
-                  onClick={() => void store.addStage(pipeline.id)}
-                >
+              {isAdmin && !addingStage && (
+                <Button variant="outline" size="sm" onClick={() => setAddingStage(true)}>
                   Add stage
                 </Button>
               )}
             </div>
+
+            {/* A form rather than a one-click add, because a new stage's champion requirement can only be
+                set now. One click that silently created an ungated stage would make the only moment the
+                decision is available the one moment nobody is asked to make it. */}
+            {addingStage && (
+              <AddStageForm
+                saving={store.isPending(pendingKey.pipeline(pipeline.id))}
+                onCancel={() => setAddingStage(false)}
+                onAdd={async (stage) => {
+                  await store.addStage(pipeline.id, stage)
+                  setAddingStage(false)
+                }}
+              />
+            )}
 
             {isAdmin && (
               <p className="mb-16 text-caption text-slate-gray">
@@ -273,5 +284,101 @@ function PipelineRail({
         })}
       </ul>
     </nav>
+  )
+}
+
+
+/**
+ * Adding a stage to a pipeline that already exists.
+ *
+ * **No champion setting here, and there cannot be one.** The gate is a *position* on the pipeline, so a
+ * stage inserted into the middle would change what that position means for every deal already past it — a
+ * deal at stage 4 would find itself at stage 5 under a rule it was never judged against. The gate is fixed
+ * when the pipeline is created, and this form deliberately cannot reach it.
+ *
+ * `expectedDays` is here, because an expectation carries none of that weight: nothing is refused for
+ * exceeding it, so adding or revising one re-reads history rather than rewriting it.
+ */
+function AddStageForm({
+  saving,
+  onCancel,
+  onAdd,
+}: {
+  saving: boolean
+  onCancel: () => void
+  onAdd: (stage: NewStage) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [probability, setProbability] = useState(50)
+  const [expectedDays, setExpectedDays] = useState(21)
+
+  const trimmed = name.trim()
+
+  return (
+    <form
+      className="mb-16 rounded-xl border border-signal-blue bg-cloud p-16"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!trimmed || saving) return
+        void onAdd({ name: trimmed, probability, expectedDays })
+      }}
+    >
+      <div className="flex flex-wrap items-end gap-12">
+        <label className="min-w-[200px] flex-1">
+          <span className="mb-[4px] block text-caption font-semibold text-slate-gray">Stage name</span>
+          <TextInput
+            autoFocus
+            value={name}
+            disabled={saving}
+            placeholder="Technical validation"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+
+        <label className="w-96">
+          <span className="mb-[4px] block text-caption font-semibold text-slate-gray">Win %</span>
+          <TextInput
+            type="number"
+            min={0}
+            max={100}
+            value={probability}
+            disabled={saving}
+            onChange={(event) =>
+              setProbability(Math.max(0, Math.min(100, Number(event.target.value))))
+            }
+          />
+        </label>
+      </div>
+
+      <label className="mt-16 block">
+        <span className="mb-[4px] block text-caption font-semibold text-slate-gray">
+          Expected days in this stage
+        </span>
+        <TextInput
+          type="number"
+          min={1}
+          max={365}
+          value={expectedDays}
+          disabled={saving}
+          onChange={(event) =>
+            setExpectedDays(Math.max(1, Math.min(365, Number(event.target.value))))
+          }
+          className="w-96!"
+        />
+        <span className="mt-[4px] block max-w-[520px] text-caption text-slate-gray">
+          How long a deal should take to clear this stage. Nothing is refused for running over — it is what
+          makes a stalled deal visible. Editable later, unlike the champion gate.
+        </span>
+      </label>
+
+      <div className="mt-16 flex items-center gap-8">
+        <Button type="submit" size="sm" loading={saving} disabled={!trimmed || saving}>
+          Add stage
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   )
 }

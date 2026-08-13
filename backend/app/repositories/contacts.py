@@ -6,12 +6,26 @@ authenticated user, and a contact has no owner of its own — so there is nothin
 """
 
 import uuid
+from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.models import Account, Contact, ContactRole, DealContact, DealRole
+from app.core import permissions
+from app.models import (
+    Account,
+    Contact,
+    ContactRole,
+    Deal,
+    DealContact,
+    DealRole,
+    PipelineTemplate,
+    Stage,
+    User,
+)
+from app.models.enums import StageKind
 
 
 async def get(db: AsyncSession, contact_id: uuid.UUID) -> Contact | None:
@@ -214,4 +228,77 @@ async def champions_for_deal(db: AsyncSession, deal_id: uuid.UUID) -> list[Conta
         .where(DealContact.deal_id == deal_id, ContactRole.key == ContactRole.CHAMPION)
     )
     return list((await db.execute(stmt)).unique().scalars())
+
+
+async def champions_for_deals(
+    db: AsyncSession, deal_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[Contact]]:
+    """The same thing for many deals at once, so flagging a whole book is one query rather than N."""
+    if not deal_ids:
+        return {}
+
+    stmt = (
+        select(DealContact.deal_id, Contact)
+        .join(Contact, Contact.id == DealContact.contact_id)
+        .join(ContactRole, ContactRole.id == DealContact.role_id)
+        .where(DealContact.deal_id.in_(deal_ids), ContactRole.key == ContactRole.CHAMPION)
+    )
+    found: dict[uuid.UUID, list[Contact]] = {}
+    for deal_id, contact in (await db.execute(stmt)).unique().all():
+        found.setdefault(deal_id, []).append(contact)
+    return found
+
+
+def _complete_champion_exists() -> Any:
+    """
+    A correlated EXISTS: does this deal have a champion with all three details on record?
+
+    Expressed in SQL rather than by loading contacts and asking `has_full_contact_details`, because the
+    caller needs the answer for every deal in the book. It has to keep step with that property by hand,
+    which is the cost of the bulk path — the three emptiness tests here are the same three fields.
+    """
+    return (
+        select(1)
+        .select_from(DealContact)
+        .join(ContactRole, ContactRole.id == DealContact.role_id)
+        .join(Contact, Contact.id == DealContact.contact_id)
+        .where(
+            DealContact.deal_id == Deal.id,
+            ContactRole.key == ContactRole.CHAMPION,
+            Contact.email != "",
+            Contact.phone != "",
+            Contact.linkedin_url != "",
+        )
+        .exists()
+    )
+
+
+async def deals_failing_champion_gate(
+    db: AsyncSession, user: User
+) -> list[tuple[uuid.UUID, str]]:
+    """
+    Deals parked at or past their pipeline's champion gate without a complete champion. `(deal_id, stage_name)`.
+
+    The comparison is `stage.position >= gate`, one earlier than the move check, because a deal sitting in
+    the gate stage needs a champion in order to *leave* it — it is subject to the rule even though it was
+    allowed to arrive. Kept as SQL and not a Python filter so the whole book costs one query.
+
+    Scoped like every other deal read, so a rep is told about their own book and an administrator about
+    everybody's. Closed stages are excluded: a won deal that closed before the gate existed is history, and
+    nagging about it would be asking somebody to fix the past.
+    """
+    stmt = (
+        select(Deal.id, Stage.name)
+        .join(Stage, Stage.id == Deal.stage_id)
+        .join(PipelineTemplate, PipelineTemplate.id == Stage.pipeline_template_id)
+        .where(
+            PipelineTemplate.champion_gate_position.is_not(None),
+            Stage.position >= PipelineTemplate.champion_gate_position,
+            Stage.kind == StageKind.OPEN,
+            ~_complete_champion_exists(),
+        )
+        .order_by(Stage.position, Deal.name)
+    )
+    return list((await db.execute(permissions.scope_deals(stmt, user))).all())
+
 

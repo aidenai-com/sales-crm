@@ -30,7 +30,6 @@ class RepPerformance(ORMModel):
 
     open_count: int
     open_value: Decimal
-    weighted_value: Decimal
     at_risk_count: int
     closing_this_week_count: int
     won_count: int
@@ -59,5 +58,4 @@ class TeamOverview(ORMModel):
     #: Deals nobody has touched recently, worst first. Actionable rather than a scoreboard.
     stale_deals: list[StaleDeal]
     total_open_value: Decimal
-    total_weighted_value: Decimal
     total_at_risk: int

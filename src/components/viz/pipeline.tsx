@@ -1,266 +1,160 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/cn'
-import { compactMoney, count } from '@/lib/format'
 
 /**
- * Components for the shape this application actually has: an ordered ladder of stages, each
- * carrying a probability that converts an open number into a weighted one.
+ * Ranked horizontal bars, and the one figure that needs a comparison beside it.
  *
- * The generic form these replace was grouped two-series bars — open value beside weighted
- * value, once per panel, four panels alike. It misreports the relationship. Weighted value is
- * `open × probability`, so it is a *part* of the open figure and can never exceed it. Drawn
- * side by side, two bars say "two independent measures"; drawn nested, they say "this much of
- * that is what we expect to land", which is the sentence a pipeline review is actually having.
+ * This file used to hold a probability-nesting encoding — open value with a weighted portion drawn inside
+ * it — plus a stage ladder built around the same idea. All of it is gone. Weighted value was
+ * `value × stage percentage`, and that percentage marks how far along a deal is rather than how likely it
+ * is to be won, so the nesting drew a relationship that did not exist. Removing the second series took the
+ * legend with it: one measure per chart, and the count rides as text.
  *
- * That nesting is the one encoding used everywhere on the screen, which is also what stops
- * every panel looking like the last one: with containment carrying open-against-weighted, the
- * second series slot is freed for the one place two measures really are independent — open
- * pipeline against closed-won, per person and per partner.
+ * What remains is the form these bars were always right for: **magnitude by identity.** Names need
+ * horizontal room, and a reader compares lengths down a column far more accurately than heights across
+ * one. Every drill-down leaf in the application uses this, because the question at a leaf is always "which
+ * of these is biggest" with a label too long to sit under a vertical bar.
  */
-
-/**
- * Open value, with the weighted portion nested inside it.
- *
- * Three layers, outermost first: the track is the full scale, so bars are comparable across
- * rows; the open fill is this row's share of it; the weighted fill sits inside the open fill.
- * The 2px surface ring on the inner fill is what keeps two blues from reading as one shape —
- * without it the nested bar's end is indistinguishable from a gradient.
- */
-export function ProbabilityBar({
-  openValue,
-  weightedValue,
-  max,
-  /** Drawn at the bar's end, in ink rather than in the series colour. */
-  trailing,
-}: {
-  openValue: number
-  weightedValue: number
-  max: number
-  trailing?: ReactNode
-}) {
-  const openPercent = max > 0 ? (openValue / max) * 100 : 0
-  // Of the open bar, not of the scale: the inner bar is a proportion of its parent.
-  const weightedPercent = openValue > 0 ? (weightedValue / openValue) * 100 : 0
-
-  return (
-    <div className="flex items-center gap-[12px]">
-      <div className="h-16 min-w-0 flex-1 overflow-hidden rounded-md bg-viz-track">
-        <div
-          className="h-full rounded-md bg-viz-1/35 transition-[width] duration-300 ease-ui motion-reduce:transition-none"
-          style={{ width: `${openPercent}%` }}
-        >
-          {/* Inset by 2px on the cross axis so the parent fill stays visible as a frame. */}
-          <div className="flex h-full items-center px-[2px]">
-            <div
-              className="h-[12px] rounded-[3px] bg-viz-1 transition-[width] duration-300 ease-ui motion-reduce:transition-none"
-              style={{ width: `${weightedPercent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-      {trailing && (
-        <span className="shrink-0 text-body-sm font-semibold text-ink-navy tabular-nums">
-          {trailing}
-        </span>
-      )}
-    </div>
-  )
-}
-
-/** The legend for the nesting, spelled out once per panel that uses it. */
-export function ProbabilityLegend() {
-  return (
-    <ul className="flex flex-wrap items-center gap-16">
-      <li className="flex items-center gap-8">
-        <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-1" />
-        <span className="text-caption text-slate-gray">Weighted</span>
-      </li>
-      <li className="flex items-center gap-8">
-        <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-1/35" />
-        <span className="text-caption text-slate-gray">Open, unweighted</span>
-      </li>
-    </ul>
-  )
-}
-
-export interface LadderStage {
-  key: string
-  name: string
-  /** The stage's own configured colour, as the board and the deal page's rail draw it. */
-  color: string
-  probability: number
-  dealCount: number
-  openValue: number
-  weightedValue: number
-}
-
-/**
- * The pipeline as its stages, in pipeline order.
- *
- * This is the screen's hero because it is the screen's subject, and it borrows the deal page's
- * own vocabulary on purpose: the same ordered path, the same per-stage colour chip. A lead who
- * has been reading stage rails all week should recognise this immediately as the same object,
- * seen from above.
- *
- * Between rows sits the narrowing — this stage's deal count as a share of the one before it.
- * Named "narrowing" and not "conversion" deliberately. These are all deals standing in the
- * pipeline right now, not one cohort followed through it, so the figure describes the
- * pipeline's present shape. Calling a snapshot ratio a conversion rate is the most common lie
- * a funnel chart tells, and a lead would act on it.
- */
-export function StageLadder({ stages }: { stages: LadderStage[] }) {
-  const max = Math.max(1, ...stages.map((stage) => stage.openValue))
-
-  return (
-    <ol className="space-y-[4px]">
-      {stages.map((stage, index) => {
-        const previous = index > 0 ? stages[index - 1] : null
-        const narrowing =
-          previous && previous.dealCount > 0
-            ? Math.round((stage.dealCount / previous.dealCount) * 100)
-            : null
-
-        return (
-          <li key={stage.key}>
-            {narrowing !== null && (
-              <div className="flex items-center gap-8 py-[4px] pl-8">
-                <ArrowDown />
-                <span className="text-caption text-mist-gray tabular-nums">
-                  {narrowing}% as many deals as {previous?.name}
-                </span>
-              </div>
-            )}
-
-            <div className="-mx-8 rounded-xl px-8 py-[12px] transition-colors duration-hover ease-ui hover:bg-cloud">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-16 gap-y-[4px]">
-                <div className="flex min-w-0 items-center gap-8">
-                  <span
-                    aria-hidden
-                    className="size-8 shrink-0 rounded-full"
-                    style={{ backgroundColor: stage.color }}
-                  />
-                  <span className="truncate text-body-sm font-semibold text-ink-navy">
-                    {stage.name}
-                  </span>
-                  <span className="shrink-0 rounded-full bg-pebble px-8 py-[1px] text-caption font-medium text-slate-gray tabular-nums">
-                    {stage.probability}%
-                  </span>
-                </div>
-                <span className="shrink-0 text-caption text-slate-gray tabular-nums">
-                  {count(stage.dealCount)} deal{stage.dealCount === 1 ? '' : 's'}
-                </span>
-              </div>
-
-              <div className="mt-8">
-                <ProbabilityBar
-                  openValue={stage.openValue}
-                  weightedValue={stage.weightedValue}
-                  max={max}
-                  trailing={compactMoney(stage.openValue)}
-                />
-              </div>
-            </div>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-function ArrowDown() {
-  return (
-    <svg
-      viewBox="0 0 12 12"
-      className="size-[12px] shrink-0 text-mist-gray"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      aria-hidden="true"
-    >
-      <path d="M6 1.5v9M3 7.5L6 10.5l3-3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
 
 export interface RankedRow {
   key: string
   label: string
-  /** Bar length. The measure the ranking is by. */
+  /** Bar length — the measure the ranking is by. */
   primary: number
   primaryDisplay: string
-  /** Second, independent measure — drawn as a separate short bar, not nested. */
-  secondary: number
-  secondaryDisplay: string
+  /** Shown in place of the primary figure on hover: the fact the bar length cannot carry. */
   meta: string
+  /**
+   * A second, genuinely independent measure, drawn as its own short bar beneath.
+   *
+   * Optional, and rarely used on purpose. It is honest for open pipeline against closed-won — money banked
+   * is not a fraction of money in play — and dishonest for anything that is a share of the primary, which
+   * is exactly the mistake the nested encoding used to make.
+   */
+  secondary?: number
+  secondaryDisplay?: string
+  /** Marks a row as drillable. Rows without it are inert and show no affordance. */
+  selectable?: boolean
 }
 
-/**
- * A ranked list of people or partners, densest form on the screen.
- *
- * Deliberately not the ladder's form. These rows have no order beyond size and no probability
- * to nest, and the two measures here — open pipeline and closed-won — genuinely are
- * independent: won value is money already banked, not a fraction of what is open. That is the
- * one case on this screen where the second series slot is honest, so it gets it.
- *
- * A rank number is printed because the list *is* a ranking; the position carries information
- * a reader would otherwise have to count out.
- */
 export function RankedRows({
   rows,
   primaryLabel,
   secondaryLabel,
+  onSelect,
+  selectHint,
 }: {
   rows: RankedRow[]
   primaryLabel: string
-  secondaryLabel: string
+  secondaryLabel?: string
+  /** Called with the row key. Rows become buttons only when this is supplied. */
+  onSelect?: (key: string) => void
+  /** What clicking does, for the row's accessible name — "Show deals in this stage". */
+  selectHint?: string
 }) {
   const [hovered, setHovered] = useState<string | null>(null)
-  const max = Math.max(1, ...rows.flatMap((row) => [row.primary, row.secondary]))
+  const hasSecondary = rows.some((row) => row.secondary !== undefined)
+  const max = Math.max(
+    1,
+    ...rows.flatMap((row) => [row.primary, row.secondary ?? 0]),
+  )
 
   return (
     <div>
-      <ul className="flex flex-wrap items-center gap-16 pb-16">
-        <li className="flex items-center gap-8">
-          <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-1" />
-          <span className="text-caption text-slate-gray">{primaryLabel}</span>
-        </li>
-        <li className="flex items-center gap-8">
-          <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-2" />
-          <span className="text-caption text-slate-gray">{secondaryLabel}</span>
-        </li>
-      </ul>
+      {/* A legend only when there are genuinely two measures. One series needs no key — the panel title
+          names it, and a legend box for a single colour is furniture. */}
+      {hasSecondary && secondaryLabel && (
+        <ul className="flex flex-wrap items-center gap-16 pb-16">
+          <li className="flex items-center gap-8">
+            <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-1" />
+            <span className="text-caption text-slate-gray">{primaryLabel}</span>
+          </li>
+          <li className="flex items-center gap-8">
+            <span aria-hidden className="h-8 w-16 shrink-0 rounded-[3px] bg-viz-2" />
+            <span className="text-caption text-slate-gray">{secondaryLabel}</span>
+          </li>
+        </ul>
+      )}
 
       <ol className="divide-y divide-hairline">
-        {rows.map((row, index) => (
-          <li
-            key={row.key}
-            onMouseEnter={() => setHovered(row.key)}
-            onMouseLeave={() => setHovered(null)}
-            className="-mx-8 flex items-center gap-[12px] px-8 py-[12px] transition-colors duration-hover ease-ui hover:bg-cloud"
-          >
-            <span className="w-16 shrink-0 text-caption font-semibold text-mist-gray tabular-nums">
-              {index + 1}
-            </span>
+        {rows.map((row, index) => {
+          const clickable = onSelect !== undefined && row.selectable !== false
+          const body = (
+            <>
+              <span className="w-16 shrink-0 text-caption font-semibold text-mist-gray tabular-nums">
+                {index + 1}
+              </span>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-[12px]">
-                <span className="min-w-0 truncate text-body-sm font-semibold text-ink-navy">
-                  {row.label}
-                </span>
-                <span className="shrink-0 text-caption text-slate-gray tabular-nums">
-                  {hovered === row.key ? row.meta : row.primaryDisplay}
-                </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-[12px]">
+                  <span className="min-w-0 truncate text-body-sm font-semibold text-ink-navy">
+                    {row.label}
+                  </span>
+                  {/* The figure swaps for the meta on hover rather than showing both: two numbers on one
+                      line and neither is read. */}
+                  <span className="shrink-0 text-caption text-slate-gray tabular-nums">
+                    {hovered === row.key ? row.meta : row.primaryDisplay}
+                  </span>
+                </div>
+
+                <div className="mt-8 space-y-[3px]">
+                  <Track value={row.primary} max={max} fill="bg-viz-1" />
+                  {row.secondary !== undefined && (
+                    <Track value={row.secondary} max={max} fill="bg-viz-2" />
+                  )}
+                </div>
               </div>
 
-              <div className="mt-8 space-y-[3px]">
-                <Track value={row.primary} max={max} fill="bg-viz-1" />
-                <Track value={row.secondary} max={max} fill="bg-viz-2" />
-              </div>
-            </div>
-          </li>
-        ))}
+              {clickable && <Chevron />}
+            </>
+          )
+
+          const shell =
+            '-mx-8 flex w-full items-center gap-[12px] px-8 py-[12px] text-left transition-colors duration-hover ease-ui'
+
+          return (
+            <li
+              key={row.key}
+              onMouseEnter={() => setHovered(row.key)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              {clickable ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect?.(row.key)}
+                  aria-label={selectHint ? `${row.label} — ${selectHint}` : row.label}
+                  className={cn(
+                    shell,
+                    'cursor-pointer hover:bg-cloud',
+                    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-blue',
+                  )}
+                >
+                  {body}
+                </button>
+              ) : (
+                <div className={cn(shell, 'hover:bg-cloud')}>{body}</div>
+              )}
+            </li>
+          )
+        })}
       </ol>
     </div>
+  )
+}
+
+/** The drill affordance. Present only on rows that go somewhere, so it means one thing. */
+function Chevron() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="size-16 shrink-0 text-mist-gray"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+    >
+      <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -279,47 +173,64 @@ function Track({ value, max, fill }: { value: number; max: number; fill: string 
 }
 
 /**
- * The screen's opening figure: one number large enough to be the headline, with the weighted
- * portion shown beneath it in the same nesting used everywhere else.
+ * One headline figure with the previous period beside it.
  *
- * Sized against the three tiles beside it rather than matching them. Four identical tiles make
- * a reader weigh four numbers equally; the open pipeline is the number the page is about, and
- * the layout should say so before the copy has to.
+ * The comparison is the whole component. "$8.4M created" is a number nobody can act on; "$8.4M, up from
+ * $5.1M last quarter" is a finding. The delta is stated in words as well as colour, because up and down
+ * are the two things a red-green pair fails to communicate to the readers who most need them.
  */
-export function HeroFigure({
+export function DeltaFigure({
   label,
   value,
-  weightedValue,
-  openValue,
-  weightedDisplay,
   meta,
+  priorValue,
+  priorDisplay,
+  priorLabel,
+  currentValue,
 }: {
   label: string
   value: string
-  weightedValue: number
-  openValue: number
-  weightedDisplay: string
   meta: string
+  /** Raw numbers, for the direction. The displays are pre-formatted. */
+  currentValue: number
+  priorValue: number
+  priorDisplay: string
+  priorLabel: string
 }) {
-  const percent = openValue > 0 ? Math.round((weightedValue / openValue) * 100) : 0
+  const delta = currentValue - priorValue
+  // A percentage against zero is undefined, not infinite — so it is simply not shown. "New" is the honest
+  // word for pipeline where there was none before.
+  const percent = priorValue > 0 ? Math.round((delta / priorValue) * 100) : null
+  const direction = delta > 0 ? 'up' : delta < 0 ? 'down' : 'level'
 
   return (
-    <div className="rounded-3xl border border-hairline bg-paper p-24 shadow-sm sm:col-span-2">
+    <div>
       <p className="text-caption font-semibold tracking-wide text-slate-gray uppercase">{label}</p>
-      <p className="mt-8 text-heading font-bold text-ink-navy tabular-nums">{value}</p>
+      <p className="mt-8 text-heading-sm leading-none font-bold text-ink-navy tabular-nums">{value}</p>
+      <p className="mt-8 text-caption text-slate-gray">{meta}</p>
 
-      <div className="mt-16 h-16 overflow-hidden rounded-md bg-viz-track">
-        <div className="flex h-full items-center px-[2px]">
-          <div
-            className="h-[12px] rounded-[3px] bg-viz-1 transition-[width] duration-300 ease-ui motion-reduce:transition-none"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      </div>
-
-      <p className="mt-8 text-body-sm text-slate-gray">
-        <span className="font-semibold text-ink-navy tabular-nums">{weightedDisplay}</span> weighted
-        — {percent}% of open value. {meta}
+      <p className="mt-16 flex flex-wrap items-baseline gap-8 text-caption">
+        <span
+          className={cn(
+            'font-semibold',
+            direction === 'up'
+              ? 'text-signal-blue'
+              : direction === 'down'
+                ? 'text-risk'
+                : 'text-slate-gray',
+          )}
+        >
+          {priorValue === 0
+            ? currentValue > 0
+              ? 'All new'
+              : 'Nothing either period'
+            : direction === 'level'
+              ? 'Level with'
+              : `${direction === 'up' ? 'Up' : 'Down'}${percent !== null ? ` ${Math.abs(percent)}%` : ''} on`}
+        </span>
+        <span className="text-slate-gray tabular-nums">
+          {priorLabel} ({priorDisplay})
+        </span>
       </p>
     </div>
   )

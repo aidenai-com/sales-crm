@@ -10,6 +10,7 @@ from app.api.v1 import (
     contacts,
     dashboard,
     deals,
+    lemlist,
     pipelines,
     reminders,
     team,
@@ -30,3 +31,8 @@ api_router.include_router(dashboard.router)
 api_router.include_router(analytics.router)
 api_router.include_router(team.router)
 api_router.include_router(assistant.router)
+api_router.include_router(lemlist.router)
+# The callback, separately, because it is the one route in this API with no authenticated user: lemlist
+# calls it and authenticates with a shared secret in the body. Kept as its own router so that fact is
+# visible here rather than buried in one decorator.
+api_router.include_router(lemlist.webhook_router)

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DealContact, DealRole, Id } from '@/types/domain'
 import { useStore } from '@/data/store'
+import { ContactSearchSelect } from '@/components/create/ContactSearchSelect'
 import { useCreation } from '@/app/creation'
 import { useSelection } from '@/app/selection'
 import { useDealPeople } from '@/hooks/useDealPeople'
@@ -461,20 +462,16 @@ function AddPerson({
 
   return (
     <div className="mt-16 space-y-8 rounded-xl border border-hairline bg-cloud p-16">
-      <Select
-        value={contactId}
+      {/* The same search-and-pick the create form uses, for the same reason: the directory is company-wide,
+          so scrolling it to find one person is not a real option. */}
+      <ContactSearchSelect
+        contacts={available}
+        value={contactId || null}
+        onChange={(id) => setContactId(id ?? '')}
         disabled={saving}
-        onChange={(e) => setContactId(e.target.value)}
-        aria-label="Person"
-      >
-        <option value="">Choose someone…</option>
-        {available.map((contact) => (
-          <option key={contact.id} value={contact.id}>
-            {contact.fullName} — {contact.accountName}
-            {contact.designation ? ` · ${contact.designation}` : ''}
-          </option>
-        ))}
-      </Select>
+        alreadyOn={new Set(existing.map((entry) => entry.contactId))}
+        emptyAction={{ label: 'File a new contact instead', onSelect: onCreateContact }}
+      />
 
       <Select
         value={roleId}

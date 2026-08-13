@@ -38,7 +38,9 @@ function plainStage(
     kind,
     position,
     wipLimit: null,
-    requiresChampion: false,
+    expectedDays: kind === 'open' ? 21 : null,
+    championRequired: false,
+    isChampionGate: false,
     entryCriteria: null,
     exitCriteria: null,
     keyActivities: null,
@@ -78,6 +80,7 @@ const seededPipelines: RawPipeline[] = [
   {
     id: 'pipe-direct',
     name: 'AidenAI Direct',
+    championGatePosition: 2,
     stages: [
       {
         id: 'stage-d1',
@@ -88,7 +91,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'open',
         position: 1,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'Fits a personalized ICP vertical',
           'Identifiable pain and trigger signal present',
@@ -126,7 +131,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'open',
         position: 2,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'First meeting secured with Director+ in tech / digital transformation',
           'Stage-1 hypothesis validated by internal contact or partner intro',
@@ -166,7 +173,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'open',
         position: 3,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'Stage-2 exit met: funded pain, exec sponsor named, budget pathway',
           'Champion identified and tested',
@@ -207,7 +216,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'open',
         position: 4,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'TVE Plan approved and signed by both teams',
           'Delivery team assigned, briefed, available',
@@ -247,7 +258,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'open',
         position: 5,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'Stage-4 exit met: POC success, ROI accepted, preferred status',
           'Full decision process mapped',
@@ -289,7 +302,9 @@ const seededPipelines: RawPipeline[] = [
         kind: 'won',
         position: 6,
         wipLimit: null,
-        requiresChampion: false,
+        expectedDays: 21,
+        championRequired: false,
+        isChampionGate: false,
         entryCriteria: [
           'Closed-won: signed contract, kickoff date in calendar',
           'Delivery team assigned; Customer Success lead introduced to exec sponsor',
@@ -326,6 +341,7 @@ const seededPipelines: RawPipeline[] = [
   {
     id: 'pipe-partner',
     name: 'Partner Co-Sell',
+    championGatePosition: 2,
     stages: [
       plainStage('stage-p1', 'Identify', 'Identify', 5, 1, RAMP[0]),
       // R7: the partner pipeline includes an onboarding stage. Post-onboarding, the

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { pendingKey, useStore } from '@/data/store'
 import { assignableOwners } from '@/lib/people'
+import { ChampionWarning, useChampionGap } from '@/components/ui/ChampionWarning'
 import { useSelection } from '@/app/selection'
 import { useAuth } from '@/app/auth'
 import { Link, routes, useRouter } from '@/app/router'
@@ -16,6 +17,7 @@ import { Spinner, LoadingPanel } from '@/components/ui/Spinner'
 import { DealCloseDateField, DealNameField, DealValueField } from '@/components/drawers/DealFields'
 import { ActivityLogForm } from '@/components/drawers/ActivityLogForm'
 import { ActivityTimeline } from '@/components/drawers/ActivityTimeline'
+import { AgeingBar } from '@/components/viz/AgeingBar'
 import { StageRail } from './StageRail'
 import { StagePlaybook } from './StagePlaybook'
 import { StageChecklistPanel } from './StageChecklistPanel'
@@ -39,6 +41,7 @@ export function DealPage({ dealId }: { dealId: string }) {
   const saving = isPending(pendingKey.deal(dealId))
 
   const checklist = useChecklist(dealId)
+  const championGap = useChampionGap(dealId)
 
   /**
    * Which stage the checklist panel is showing, independent of where the deal is.
@@ -91,7 +94,6 @@ export function DealPage({ dealId }: { dealId: string }) {
   }
 
   const { deal, account, lead, stage, pipeline } = view
-  const weighted = (deal.value * stage.probability) / 100
 
   // Falls back to the deal's own stage: the selection is only ever a stage of this pipeline,
   // but a pipeline edited in another tab could remove the one being viewed.
@@ -168,9 +170,20 @@ export function DealPage({ dealId }: { dealId: string }) {
           <p className="mt-8 text-heading-sm font-bold text-ink-navy tabular-nums">
             {fullMoney(deal.value)}
           </p>
-          <p className="mt-8 text-caption text-slate-gray tabular-nums">
-            {fullMoney(weighted)} weighted at {stage.probability}%
+          {/* The stage, not a weighted figure. This used to read "$4,200,000 weighted at 75%", which
+              multiplied the value by the stage's percentage — and that percentage is how far along the
+              deal is, not how likely it is to close. Naming the stage says the true thing the number
+              was reaching for. */}
+          <p className="mt-8 text-caption text-slate-gray">
+            {stage.shortName} · {stage.probability}% through
           </p>
+          {/* Ageing beside the value, because those are the two facts that decide whether this deal needs
+              attention today: what it is worth, and whether it has stopped moving. */}
+          {deal.ageing && (
+            <div className="mt-8 max-w-[200px] sm:ml-auto">
+              <AgeingBar ageing={deal.ageing} stageName={stage.name} size="sm" />
+            </div>
+          )}
         </div>
       </header>
 
@@ -188,7 +201,11 @@ export function DealPage({ dealId }: { dealId: string }) {
             Select a stage to see its checklist and documents
           </p>
         </div>
+        {/* Between the rail's explanation and the rail itself: this is the sentence that explains why
+            the next click is about to be refused. */}
+        {championGap && <ChampionWarning gap={championGap} className="mb-16" />}
         <StageRail
+          ageing={deal.ageing}
           pipeline={pipeline}
           currentStageId={deal.stageId}
           selectedStageId={selectedStageId || deal.stageId}

@@ -4,6 +4,7 @@ import { useStore } from '@/data/store'
 import { useCreation } from '@/app/creation'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Field'
+import { ContactSearchSelect } from './ContactSearchSelect'
 import { RoleChip, SideBadge } from '@/components/ui/ContactBits'
 
 /**
@@ -198,23 +199,22 @@ export function DealContactPicker({
             )}
 
             <div className="mt-8 flex flex-wrap items-end gap-8">
-              <label className="min-w-[200px] flex-1">
+              <label className="min-w-[240px] flex-1">
                 <span className="mb-[4px] block text-caption font-semibold text-slate-gray">
                   Person
                 </span>
-                <Select
-                  value={pickedContact}
+                <ContactSearchSelect
+                  contacts={available}
+                  value={pickedContact || null}
+                  onChange={(id) => setPickedContact(id ?? '')}
                   disabled={disabled}
-                  onChange={(e) => setPickedContact(e.target.value)}
-                >
-                  <option value="">Choose someone…</option>
-                  {available.map((contact) => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.fullName} — {contact.accountName}
-                      {contact.designation ? ` · ${contact.designation}` : ''}
-                    </option>
-                  ))}
-                </Select>
+                  // Labelled, not blocked: the same person can hold two roles here.
+                  alreadyOn={new Set(contacts.map((entry) => entry.contactId))}
+                  emptyAction={{
+                    label: 'File a new contact instead',
+                    onSelect: () => openCreate({ kind: 'contact', accountId }),
+                  }}
+                />
               </label>
 
               <label className="min-w-[150px]">

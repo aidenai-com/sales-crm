@@ -116,8 +116,10 @@ async def seed(db: AsyncSession) -> None:
     templates: dict[str, PipelineTemplate] = {}
     stages: dict[tuple[str, str], Stage] = {}
 
-    for name, stage_defs in PIPELINES:
-        template = PipelineTemplate(name=name)
+    for name, stage_defs, gate_position in PIPELINES:
+        # The gate is set here and only here. It is immutable after creation, so seeding is the one moment a
+        # seeded pipeline's requirement is decided.
+        template = PipelineTemplate(name=name, champion_gate_position=gate_position)
         db.add(template)
         await db.flush()
         templates[name] = template
@@ -132,6 +134,7 @@ async def seed(db: AsyncSession) -> None:
                 kind=definition["kind"],
                 position=position,
                 wip_limit=None,
+                expected_days=definition.get("expected_days"),
                 entry_criteria=definition.get("entry_criteria"),
                 exit_criteria=definition.get("exit_criteria"),
                 key_activities=definition.get("key_activities"),

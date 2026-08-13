@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { DealPeople, Id } from '@/types/domain'
 import { ApiError, errorMessage } from '@/api/client'
 import { contactApi } from '@/api/endpoints'
+import { useStore } from '@/data/store'
 
 /**
  * The roles a deal tracks and the people on it, fetched per deal.
@@ -18,6 +19,16 @@ import { contactApi } from '@/api/endpoints'
 const EMPTY: DealPeople = { roles: [], contacts: [] }
 
 export function useDealPeople(dealId: Id) {
+  // Two things outside this hook have to react to every write here.
+  //
+  // The champion warning, because mapping or unmapping a champion is exactly what makes a deal satisfy —
+  // or stop satisfying — its stage's requirement, and this hook owns the only writes that can change
+  // that answer without the deal moving.
+  //
+  // The activity feed, because the server logs each of these changes against the deal, and on the deal
+  // page the timeline sits a few hundred pixels from the panel doing the writing.
+  const { syncChampionGaps, syncActivities } = useStore()
+
   const [people, setPeople] = useState<DealPeople>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,19 +53,24 @@ export function useDealPeople(dealId: Id) {
   }, [load])
 
   /** Every write shares this: run it, replace the whole picture, report a refusal without losing state. */
-  const run = useCallback(async (request: () => Promise<DealPeople>) => {
-    setSaving(true)
-    setError(null)
-    try {
-      setPeople(await request())
-      return true
-    } catch (caught) {
-      setError(errorMessage(caught))
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }, [])
+  const run = useCallback(
+    async (request: () => Promise<DealPeople>) => {
+      setSaving(true)
+      setError(null)
+      try {
+        setPeople(await request())
+        void syncChampionGaps()
+        void syncActivities()
+        return true
+      } catch (caught) {
+        setError(errorMessage(caught))
+        return false
+      } finally {
+        setSaving(false)
+      }
+    },
+    [syncChampionGaps, syncActivities],
+  )
 
   const addContact = useCallback(
     (contactId: Id, roleId: Id | null) =>

@@ -26,6 +26,7 @@ import { PipelineSettings } from '@/screens/Settings/PipelineSettings'
 import { AiUsage } from '@/screens/Settings/AiUsage'
 import { Team } from '@/screens/Settings/Team'
 import { Profile } from '@/screens/Settings/Profile'
+import { Integrations } from '@/screens/Settings/Integrations'
 import { NotFound } from '@/screens/NotFound'
 import { Landing } from '@/screens/Landing/Landing'
 import { Login } from '@/screens/Login/Login'
@@ -56,6 +57,8 @@ function Screen() {
       return <Team />
     case 'profile':
       return <Profile />
+    case 'integrations':
+      return <Integrations />
     default:
       return <NotFound />
   }
@@ -68,6 +71,10 @@ function Screen() {
  */
 function Workspace() {
   const { busy, error, clearError, status, loadError, refresh } = useStore()
+  // Administrators only, and checked here as well as on the button that opens it. The trigger is hidden
+  // for reps; not mounting the drawer means no leftover state or stray shortcut can open a panel that
+  // answers questions about a book they cannot see.
+  const { isAdmin } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
 
@@ -120,7 +127,7 @@ function Workspace() {
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       <RecordDrawer />
       <CreateDrawer />
-      <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      {isAdmin && <AssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />}
     </>
   )
 }

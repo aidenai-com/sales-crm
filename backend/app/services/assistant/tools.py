@@ -38,9 +38,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "pipeline_summary",
             "description": (
-                "Totals for the open pipeline the current user can see: open value, weighted "
-                "value, deal count, and a per-stage breakdown in pipeline order. Use this for "
-                "any question about pipeline size, stage distribution, or weighted forecast."
+                "Totals for the open pipeline the current user can see: open value, deal count, "
+                "and a per-stage breakdown in pipeline order. Use this for any question about "
+                "pipeline size or stage distribution. There is no weighted or expected value."
             ),
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
@@ -126,12 +126,9 @@ async def pipeline_summary(db: AsyncSession, viewer: User) -> dict[str, Any]:
 
     by_stage: dict[uuid.UUID, dict[str, Any]] = {}
     total_open = Decimal("0")
-    total_weighted = Decimal("0")
 
     for deal in deals:
-        weighted = deal.value * Decimal(deal.stage.probability) / Decimal(100)
         total_open += deal.value
-        total_weighted += weighted
 
         slot = by_stage.setdefault(
             deal.stage_id,
@@ -141,25 +138,27 @@ async def pipeline_summary(db: AsyncSession, viewer: User) -> dict[str, Any]:
                 "position": deal.stage.position,
                 "deals": 0,
                 "open_value": Decimal("0"),
-                "weighted_value": Decimal("0"),
             },
         )
         slot["deals"] += 1
         slot["open_value"] += deal.value
-        slot["weighted_value"] += weighted
 
     stages = sorted(by_stage.values(), key=lambda row: row["position"])
     for row in stages:
         row.pop("position")
         row["open_value"] = _money(row["open_value"])
-        row["weighted_value"] = _money(row["weighted_value"])
 
     return {
         "currency": "USD",
         "open_deals": len(deals),
         "open_value": _money(total_open),
-        "weighted_value": _money(total_weighted),
-        "note": "Weighted value is open value multiplied by each stage's probability.",
+        # Stated explicitly because the model will otherwise reach for the arithmetic itself: a stage's
+        # percentage is how far along the deal is, not a likelihood, so multiplying money by it produces
+        # nothing meaningful. The assistant must not offer a weighted or expected figure.
+        "note": (
+            "`probability` is the stage's progression marker, not a win likelihood. Do not multiply value "
+            "by it and do not report a weighted or expected value — no such figure exists in this CRM."
+        ),
         "by_stage": stages,
     }
 
@@ -349,8 +348,6 @@ async def deal_detail(db: AsyncSession, viewer: User, deal_id: str) -> dict[str,
         .options(joinedload(Activity.author))
     )
 
-    weighted = deal.value * Decimal(deal.stage.probability) / Decimal(100)
-
     return {
         "deal": deal.name,
         "account": deal.account.name,
@@ -359,7 +356,6 @@ async def deal_detail(db: AsyncSession, viewer: User, deal_id: str) -> dict[str,
         "stage": deal.stage.name,
         "probability": deal.stage.probability,
         "value": _money(deal.value),
-        "weighted_value": _money(weighted),
         "expected_close": deal.expected_close_date.isoformat(),
         "health": state.value,
         "days_since_activity": (now - (touched or deal.created_at).replace(tzinfo=timezone.utc)).days
@@ -383,8 +379,8 @@ TOOL_SCHEMAS.append(
         "function": {
             "name": "deal_detail",
             "description": (
-                "Full detail for one deal by id: stage, value, weighted value, owner, "
-                "close date, health, and its recent activity. Use this whenever the user says "
+                "Full detail for one deal by id: stage, value, owner, close date, health, "
+                "and its recent activity. Use this whenever the user says "
                 "'this deal' or asks about the deal named in the context note."
             ),
             "parameters": {

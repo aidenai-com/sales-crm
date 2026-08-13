@@ -1,4 +1,4 @@
-import type { PipelineTemplate, Stage } from '@/types/domain'
+import type { Ageing, PipelineTemplate, Stage } from '@/types/domain'
 import { cn } from '@/lib/cn'
 
 /**
@@ -29,6 +29,7 @@ export function StageRail({
   selectedStageId,
   onSelect,
   completion,
+  ageing,
 }: {
   pipeline: PipelineTemplate
   /** Where the deal actually is. */
@@ -38,6 +39,13 @@ export function StageRail({
   onSelect: (stageId: string) => void
   /** Per-stage checklist progress, so the rail shows how much of each stage is done. */
   completion: Record<string, { complete: number; total: number }>
+  /**
+   * How long the deal has been in its current stage. Replaces the word "Here" on that step.
+   *
+   * Only on the current one: the rail has no record of how long the deal spent in the stages it has already
+   * left, and printing a number under each would invent a history.
+   */
+  ageing?: Ageing | null
 }) {
   const ordered = [...pipeline.stages].sort((a, b) => a.position - b.position)
   const open = ordered.filter((s) => s.kind === 'open')
@@ -63,11 +71,15 @@ export function StageRail({
                 onClick={() => onSelect(stage.id)}
                 aria-current={isCurrent ? 'step' : undefined}
                 aria-pressed={isSelected}
-                title={
+                title={[
                   isCurrent
                     ? `${stage.name} — the deal is here`
-                    : `View ${stage.name}'s checklist and documents`
-                }
+                    : `View ${stage.name}'s checklist and documents`,
+                  stage.isChampionGate && 'A champion is required to move past this stage',
+                  stage.expectedDays !== null && `${stage.expectedDays} days expected`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
                 className={cn(
                   'group w-full rounded-lg border px-8 py-8 text-left transition-colors',
                   isCurrent
@@ -100,10 +112,31 @@ export function StageRail({
                   >
                     {stage.shortName}
                   </span>
-                  {isCurrent && (
+                  {isCurrent ? (
                     <span className="shrink-0 text-caption font-semibold text-signal-blue">
-                      Here
+                      {/* "Here" plus how long it has been here. On the current step those are one fact, and
+                          the rail is where somebody looks to ask "how is this deal progressing". */}
+                      {ageing && ageing.daysOver > 0 ? (
+                        <span className="text-risk">{ageing.daysOver}d over</span>
+                      ) : ageing ? (
+                        `${ageing.daysUsed}d`
+                      ) : (
+                        'Here'
+                      )}
                     </span>
+                  ) : (
+                    // Marked on the gate stage only, not on every stage the rule covers: one boundary is a
+                    // landmark, six identical marks down the rail are wallpaper. The full sentence is in
+                    // the title, and the refusal itself says the rest.
+                    stage.isChampionGate && (
+                      <span
+                        aria-label="Champion gate"
+                        title="A champion is required to move past this stage"
+                        className="shrink-0 text-caption font-bold text-signal-blue"
+                      >
+                        ★
+                      </span>
+                    )
                   )}
                 </span>
 

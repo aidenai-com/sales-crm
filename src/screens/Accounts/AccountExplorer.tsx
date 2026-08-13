@@ -1,44 +1,17 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '@/data/store'
-import { cn } from '@/lib/cn'
 import { useCreation } from '@/app/creation'
 import { buildDealViews, buildTree, filterTree, type AccountNode } from '@/lib/rollup'
 import { dealRows } from '@/lib/export'
 import { TextInput } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
+import { Segmented } from '@/components/ui/Segmented'
 import { ExportButton } from '@/components/ui/ExportButton'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { AccountRow } from './AccountRow'
 
 type Scope = 'active' | 'all'
-
-/** One of two mutually exclusive views of the same list, so a tab rather than a checkbox. */
-function ScopeTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'rounded-md px-12 py-[4px] text-caption font-semibold transition-colors duration-hover ease-ui',
-        active
-          ? 'bg-paper text-ink-navy shadow-sm'
-          : 'text-slate-gray hover:text-ink-navy',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
 
 /**
  * Whether this company is one somebody is actually working.
@@ -142,19 +115,15 @@ export function AccountExplorer() {
           {/* Only shown once there is something to hide. With nothing filed but working accounts, a
               filter offering to reveal none of them is a control that does nothing. */}
           {directoryOnly > 0 && (
-            <div
-              role="group"
-              aria-label="Which companies to show"
-              className="flex items-center gap-[2px] rounded-lg border border-hairline bg-pebble p-[2px]"
-            >
-              <ScopeTab active={scope === 'active'} onClick={() => setScope('active')}>
-                Active
-              </ScopeTab>
-              <ScopeTab active={scope === 'all'} onClick={() => setScope('all')}>
-                All companies
-                <span className="ml-8 text-slate-gray">{tree.length}</span>
-              </ScopeTab>
-            </div>
+            <Segmented
+              label="Which companies to show"
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'active', label: 'Active', count: tree.length - directoryOnly },
+                { value: 'all', label: 'All companies', count: tree.length },
+              ]}
+            />
           )}
         </div>
         <div className="flex items-center gap-8">

@@ -25,14 +25,17 @@ class ActivityKind(str, enum.Enum):
     """
     What kind of thing happened.
 
-    Three of these are written by the server rather than logged by a person: STAGE_CHANGE when
-    a deal moves, DOCUMENT when a file is filed against or removed from a deliverable, and
-    NUDGE when an administrator chases a deal's owner. None is offered in the log-activity form
-    — see `LoggableActivityKind` on the frontend.
+    Four of these are written by the server rather than logged by a person: STAGE_CHANGE when a
+    deal moves, DOCUMENT when a file is filed against or removed from a deliverable, NUDGE when an
+    administrator chases a deal's owner, and CONTACT_CHANGE when the people on a deal or the roles
+    it tracks change. None is offered in the log-activity form — see `LoggableActivityKind` on the
+    frontend.
 
-    NUDGE is the one kind that does NOT count as a touch. See `NON_TOUCH_KINDS` in
-    `app.services.health`: an administrator asking for work to happen is not the work happening,
-    and counting it would clear the very staleness flag that prompted the nudge.
+    NUDGE and CONTACT_CHANGE do NOT count as touches. See `NON_TOUCH_KINDS` in
+    `app.services.health`: an administrator asking for work to happen is not the work happening, and
+    counting it would clear the very staleness flag that prompted the nudge. Nor is filing who is
+    involved contact with them — a deal whose champion was mapped three weeks ago and never called
+    since is exactly the stale deal the flag exists to surface.
 
     The frontend groups these into three coloured categories (touchpoint, document, system).
     That grouping is derived from the kind and deliberately not stored: it has no exceptions,
@@ -47,6 +50,7 @@ class ActivityKind(str, enum.Enum):
     STAGE_CHANGE = "stage-change"
     DOCUMENT = "document"
     NUDGE = "nudge"
+    CONTACT_CHANGE = "contact-change"
 
 
 class ActivitySubjectType(str, enum.Enum):
@@ -74,3 +78,20 @@ class Health(str, enum.Enum):
     HEALTHY = "healthy"
     CLOSING_SOON = "closing-soon"
     AT_RISK = "at-risk"
+
+
+class LemlistSyncStatus(str, enum.Enum):
+    """
+    Where a lemlist connection's import stands.
+
+    `SYNCING` is held in the database rather than in memory so a second sync request can be refused while
+    one is running — a full import walks every campaign under a 20-request-per-2-second budget, and two
+    overlapping runs would spend that budget racing each other to write the same rows.
+
+    `ERROR` is separate from `IDLE` because they need different offers: an idle connection needs a "sync
+    now" button, and a failed one needs the reason and a retry.
+    """
+
+    IDLE = "idle"
+    SYNCING = "syncing"
+    ERROR = "error"

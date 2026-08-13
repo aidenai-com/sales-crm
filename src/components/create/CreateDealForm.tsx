@@ -51,7 +51,9 @@ export function CreateDealForm({
   const [leadId, setLeadId] = useState<string>(defaultLeadId ?? '')
   const [pipelineId, setPipelineId] = useState(defaultPipelineId ?? snapshot.pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(defaultStageId ?? '')
-  const [value, setValue] = useState(0)
+  //: Held as a string, and empty to begin with. It used to be `0`, which put a zero in the field that a
+  //: rep had to delete before typing — and which submitted as a real, meaningless $0 deal if they did not.
+  const [value, setValue] = useState('')
   const [closeDate, setCloseDate] = useState(defaultCloseDate)
   const [ownerId, setOwnerId] = useState(user?.id ?? snapshot.people[0]?.id ?? '')
   const [contacts, setContacts] = useState<DealContactAssignment[]>([])
@@ -82,6 +84,10 @@ export function CreateDealForm({
   // This is the *only* place the "a deal needs at least one contact" rule is enforced — the API accepts
   // a payload without contacts so that it stays compatible and so that a missing contact cannot mask an
   // ownership error. That makes the guard below load-bearing, not a convenience.
+  // `Number('')` is 0, which is exactly the answer wanted here: an empty field and a zero are both "no
+  // value given", and both are refused with the same sentence.
+  const numericValue = Number(value)
+
   const blockedBecause =
     trimmed.length === 0
       ? 'Give the opportunity a name.'
@@ -89,9 +95,11 @@ export function CreateDealForm({
         ? 'Choose the customer.'
         : effectiveStageId === ''
           ? 'Choose a stage.'
-          : contacts.length === 0
-            ? 'Add at least one contact, so there is a route to the customer.'
-            : null
+          : numericValue <= 0
+            ? 'Give the deal a value.'
+            : contacts.length === 0
+              ? 'Add at least one contact, so there is a route to the customer.'
+              : null
 
   const canSave = blockedBecause === null && !saving
 
@@ -120,7 +128,7 @@ export function CreateDealForm({
         leadId: leadId || null,
         pipelineTemplateId: pipelineId,
         stageId: effectiveStageId,
-        value,
+        value: numericValue,
         expectedCloseDate: closeDate,
         ownerId,
         contacts,
@@ -228,7 +236,8 @@ export function CreateDealForm({
             step={10_000}
             value={value}
             disabled={saving}
-            onChange={(e) => setValue(Number(e.target.value) || 0)}
+            placeholder="250000"
+            onChange={(e) => setValue(e.target.value)}
           />
         </Field>
 

@@ -1,11 +1,12 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core import permissions
-from app.models import Activity, Deal, Stage, User
+from app.models import Activity, ActivityKind, Deal, Stage, User
 from app.services import health
 
 
@@ -80,6 +81,29 @@ async def last_activity_map(db: AsyncSession) -> dict[uuid.UUID, object]:
     )
     result = await db.execute(stmt)
     return {deal_id: occurred_at for deal_id, occurred_at in result.all() if deal_id is not None}
+
+
+async def last_stage_change_map(db: AsyncSession) -> dict[uuid.UUID, datetime]:
+    """
+    When each deal last moved stage, in one grouped query.
+
+    This is the evidence ageing rests on: the newest stage-change activity is the moment the deal arrived
+    where it is now. Only the timestamp is needed, not which stage — a move is a move, and the deal already
+    knows where it ended up.
+
+    Deals absent from the result have never been moved through the API. That is not an error and not a zero;
+    `services.ageing` treats it as "no arrival recorded" and falls back to a measure it can defend.
+
+    Deliberately unscoped, like `last_activity_map`: it returns timestamps keyed by deal id and is only read
+    for deals the caller was already allowed to load.
+    """
+    stmt = (
+        select(Activity.deal_id, func.max(Activity.occurred_at))
+        .where(Activity.deal_id.is_not(None), Activity.kind == ActivityKind.STAGE_CHANGE)
+        .group_by(Activity.deal_id)
+    )
+    result = await db.execute(stmt)
+    return {deal_id: moved_at for deal_id, moved_at in result.all() if deal_id is not None}
 
 
 async def count_in_stage(db: AsyncSession, stage_id: uuid.UUID) -> int:

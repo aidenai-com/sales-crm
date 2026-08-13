@@ -6,16 +6,21 @@ so these tests care as much about *which* refusal is reported as about whether o
 champion" and "your champion has no phone number" send somebody to two different places, and a gate
 that cannot tell them apart is a gate people learn to route around.
 
-`requires_champion` is switched on inside each test rather than in the fixture, because the shared
-`second_stage` is what the auto-advance tests move deals into — gating it there would make those tests
-fail for a reason that has nothing to do with what they assert.
+The gate is **one position on the pipeline**, not a flag per stage, and the rule is "from this stage
+onward": a deal may enter the gate stage freely and cannot leave it — or any stage after it — without a
+champion. So `_gate` sets a position on the template, and the position it sets decides which moves are
+refused.
+
+It is set inside each test rather than in the fixture because the shared `second_stage` is what the
+auto-advance tests move deals into — gating from there would make those tests fail for a reason that has
+nothing to do with what they assert.
 """
 
 import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
-from app.models import Contact, ContactRole, DealContact
+from app.models import Contact, ContactRole, DealContact, PipelineTemplate
 from tests.conftest import deal_payload
 
 API = settings.api_v1_prefix
@@ -24,8 +29,16 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _gate(session, stage, *, on: bool = True) -> None:
-    stage.requires_champion = on
-    session.add(stage)
+    """
+    Puts the pipeline gate at `stage` (or removes it).
+
+    Takes a stage rather than a number so the call sites read the same as before, but what it writes is the
+    template position — the gate has no per-stage representation to set any more. Note the consequence for
+    the tests below: gating a stage makes moves *out of* it refusable, not moves into it.
+    """
+    pipeline = await session.get(PipelineTemplate, stage.pipeline_template_id)
+    pipeline.champion_gate_position = stage.position if on else None
+    session.add(pipeline)
     await session.commit()
 
 
@@ -57,8 +70,12 @@ async def test_a_gated_stage_refuses_a_deal_with_no_champion(
     # Read before gating. `_gate` commits, which expires every loaded instance, and touching an
     # expired attribute afterwards triggers a lazy refresh from sync context — a greenlet error, not an
     # assertion failure, which is a confusing way for a test to break.
-    stage_name = data["second_stage"].name
-    await _gate(session, data["second_stage"])
+    #
+    # The *gate* stage, not the destination, and that is the assertion. Under a positional gate the rule
+    # starts somewhere and applies onward, so naming the destination would send somebody to fix a stage that
+    # did not cause the refusal — a deal stopped at stage 4 by a gate at 2 has a problem that began at 2.
+    gate_stage_name = data["open_stage"].name
+    await _gate(session, data["open_stage"])
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -70,7 +87,7 @@ async def test_a_gated_stage_refuses_a_deal_with_no_champion(
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert "champion" in detail.lower()
-    assert stage_name in detail
+    assert gate_stage_name in detail
 
 
 async def test_the_refusal_says_what_is_missing_when_a_champion_exists(
@@ -82,7 +99,7 @@ async def test_the_refusal_says_what_is_missing_when_a_champion_exists(
     added one reads as a bug.
     """
     await _assign(session, data["priya_deal"], data["incomplete_contact"], data["champion_role"])
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -101,7 +118,7 @@ async def test_the_refusal_says_what_is_missing_when_a_champion_exists(
 
 async def test_a_complete_champion_passes_the_gate(client: AsyncClient, as_priya, session, data):
     await _assign(session, data["priya_deal"], data["complete_contact"], data["champion_role"])
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -119,7 +136,7 @@ async def test_one_complete_champion_is_enough(client: AsyncClient, as_priya, se
     """
     await _assign(session, data["priya_deal"], data["incomplete_contact"], data["champion_role"])
     await _assign(session, data["priya_deal"], data["complete_contact"], data["champion_role"])
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -133,7 +150,7 @@ async def test_a_non_champion_role_does_not_satisfy_the_gate(
     client: AsyncClient, as_priya, session, data
 ):
     """The fixture already puts a complete contact on this deal as Executive Sponsor. That is not a champion."""
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -153,7 +170,7 @@ async def test_renaming_the_champion_role_does_not_disable_the_gate(
     name it would silently stop enforcing, and nobody would find out until a deal reached a stage it
     should not have.
     """
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     renamed = await client.patch(
         f"{API}/contacts/roles/{data['champion_role'].id}",
@@ -181,7 +198,7 @@ async def test_the_gate_also_covers_a_stage_change_through_patch(
     A gate on `POST /stage` alone would be no gate: `PATCH /deals/{id}` accepts `stageId` too, and the
     board is not the only way a deal moves.
     """
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.patch(
         f"{API}/deals/{data['priya_deal'].id}",
@@ -211,7 +228,7 @@ async def test_a_refused_patch_does_not_apply_its_other_fields(
     original = before.json()["name"]
     gated_stage_id = data["second_stage"].id
 
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     response = await client.patch(
         f"{API}/deals/{deal_id}",
@@ -232,7 +249,7 @@ async def test_moving_backwards_is_never_gated(client: AsyncClient, as_priya, se
     the exit as well would trap it where it is.
     """
     await _assign(session, data["priya_deal"], data["complete_contact"], data["champion_role"])
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     forward = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -263,7 +280,9 @@ async def test_a_closed_stage_is_not_gated_by_default(client: AsyncClient, as_pr
     dashboard — the gate would corrupt the reporting it exists to protect. The migration seeds closed
     stages ungated; this is the assertion that keeps it that way.
     """
-    assert data["won_stage"].requires_champion is False
+    # No gate is configured on this pipeline at all, and a terminal stage is exempt even when one is:
+    # `gate_applies_at` excludes non-open stages, so marking a deal won or lost never asks for a champion.
+    assert data["pipeline"].champion_gate_position is None
 
     response = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",
@@ -421,7 +440,7 @@ async def test_removing_the_champion_from_a_gated_stage_is_allowed(
     link = await _assign(
         session, data["priya_deal"], data["complete_contact"], data["champion_role"]
     )
-    await _gate(session, data["second_stage"])
+    await _gate(session, data["open_stage"])
 
     moved = await client.post(
         f"{API}/deals/{data['priya_deal'].id}/stage",

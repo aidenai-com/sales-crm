@@ -122,6 +122,21 @@ class DealRoleRead(ORMModel):
     filled_count: int
 
 
+class ChampionGap(ORMModel):
+    """
+    A deal sitting in a stage whose champion requirement it does not meet.
+
+    The gate refuses *transitions*, so this is the state the gate could not see: a deal that entered
+    before the flag was set on its stage, or whose champion was unmapped afterwards. `detail` is the
+    same sentence a refused move would produce, so the warning a rep reads now and the refusal they hit
+    later say the same thing.
+    """
+
+    deal_id: uuid.UUID
+    stage_name: str
+    detail: str
+
+
 class DealContactRead(ORMModel):
     """One contact on a deal, flattened so the deal page renders without further lookups."""
 

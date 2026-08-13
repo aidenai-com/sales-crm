@@ -31,6 +31,7 @@ export type RouteName =
   | 'aiUsage'
   | 'team'
   | 'profile'
+  | 'integrations'
   | 'not-found'
 
 export interface Match {
@@ -60,6 +61,7 @@ const ROUTES: Array<{ name: RouteName; pattern: string }> = [
   { name: 'aiUsage', pattern: '/settings/ai-usage' },
   { name: 'team', pattern: '/settings/team' },
   { name: 'profile', pattern: '/settings/profile' },
+  { name: 'integrations', pattern: '/settings/integrations' },
 ]
 
 /**
@@ -187,4 +189,5 @@ export const routes = {
   aiUsage: '/settings/ai-usage',
   team: '/settings/team',
   profile: '/settings/profile',
+  integrations: '/settings/integrations',
 } as const

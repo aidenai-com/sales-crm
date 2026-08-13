@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { pendingKey, useStore } from '@/data/store'
 import { assignableOwners } from '@/lib/people'
+import { ChampionWarning, useChampionGap } from '@/components/ui/ChampionWarning'
 import { useSelection } from '@/app/selection'
 import { Link, routes } from '@/app/router'
 import { dealHealthDetail } from '@/lib/health'
@@ -35,9 +36,12 @@ export function DealDrawerBody({ dealId }: { dealId: string }) {
   const lead = deal.leadId ? snapshot.leads.find((l) => l.id === deal.leadId) : null
   const stage = pipeline.stages.find((s) => s.id === deal.stageId)
   const healthDetail = dealHealthDetail(deal, snapshot.activities)
+  const championGap = useChampionGap(deal.id)
 
   return (
     <div className="space-y-24">
+      {championGap && <ChampionWarning gap={championGap} />}
+
       <div className="flex flex-wrap items-center justify-between gap-8">
         <div className="flex flex-wrap items-center gap-8">
           <HealthBadge health={healthDetail.health} detail={healthDetail} />

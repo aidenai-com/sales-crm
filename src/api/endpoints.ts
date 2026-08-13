@@ -1,10 +1,13 @@
 import type {
   Account,
+  Ageing,
   Activity,
   ActivityKind,
   ActivitySubjectType,
+  AnalyticsPeriod,
   AnalyticsSummary,
   Attachment,
+  ChampionGap,
   CompletionResult,
   Contact,
   ContactRole,
@@ -14,6 +17,11 @@ import type {
   DealContactAssignment,
   DealPeople,
   Id,
+  LemlistCampaign,
+  LemlistEngagement,
+  LemlistProspect,
+  LemlistStatus,
+  LemlistSyncResult,
   Lead,
   Person,
   PipelineTemplate,
@@ -58,7 +66,9 @@ interface StageDto {
   kind: StageKind
   position: number
   wipLimit: number | null
-  requiresChampion: boolean
+  expectedDays: number | null
+  championRequired: boolean
+  isChampionGate: boolean
   entryCriteria: string[] | null
   exitCriteria: string[] | null
   keyActivities: string[] | null
@@ -74,6 +84,7 @@ interface DeliverableDto {
 interface PipelineDto {
   id: string
   name: string
+  championGatePosition: number | null
   stages: StageDto[]
 }
 
@@ -104,6 +115,7 @@ interface DealDto {
   currency: string
   expectedCloseDate: string
   ownerId: string
+  ageing: Ageing | null
 }
 
 interface ActivityDto {
@@ -172,7 +184,9 @@ function toStage(dto: StageDto): Stage {
     color: dto.color,
     kind: dto.kind,
     position: dto.position,
-    requiresChampion: dto.requiresChampion,
+    expectedDays: dto.expectedDays,
+    championRequired: dto.championRequired,
+    isChampionGate: dto.isChampionGate,
     wipLimit: dto.wipLimit,
     entryCriteria: dto.entryCriteria,
     exitCriteria: dto.exitCriteria,
@@ -187,6 +201,7 @@ function toPipeline(dto: PipelineDto): PipelineTemplate {
   return {
     id: dto.id,
     name: dto.name,
+    championGatePosition: dto.championGatePosition,
     // Defensive: the API orders these, but the board's correctness should not depend on it.
     stages: dto.stages.map(toStage).sort((a, b) => a.position - b.position),
   }
@@ -205,6 +220,7 @@ function toDeal(dto: DealDto): Deal {
     currency: dto.currency,
     expectedCloseDate: dto.expectedCloseDate,
     ownerId: dto.ownerId,
+    ageing: dto.ageing ?? null,
   }
 }
 
@@ -234,22 +250,43 @@ export const readApi = {
     api.get<ActivityDto[]>(`/activities?limit=${limit}`) as Promise<Activity[]>,
   contacts: () => api.get<Contact[]>('/contacts'),
   contactRoles: () => api.get<ContactRole[]>('/contacts/roles'),
+  championGaps: () => api.get<ChampionGap[]>('/deals/champion-gaps'),
 }
 
 /** One call per collection, in parallel. Everything the UI needs to render any screen. */
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [people, accounts, leads, deals, pipelines, activities, contacts, contactRoles] =
-    await Promise.all([
-      readApi.users(),
-      readApi.accounts(),
-      readApi.leads(),
-      readApi.deals(),
-      readApi.pipelines(),
-      readApi.activities(),
-      readApi.contacts(),
-      readApi.contactRoles(),
-    ])
-  return { people, accounts, leads, deals, pipelines, activities, contacts, contactRoles }
+  const [
+    people,
+    accounts,
+    leads,
+    deals,
+    pipelines,
+    activities,
+    contacts,
+    contactRoles,
+    championGaps,
+  ] = await Promise.all([
+    readApi.users(),
+    readApi.accounts(),
+    readApi.leads(),
+    readApi.deals(),
+    readApi.pipelines(),
+    readApi.activities(),
+    readApi.contacts(),
+    readApi.contactRoles(),
+    readApi.championGaps(),
+  ])
+  return {
+    people,
+    accounts,
+    leads,
+    deals,
+    pipelines,
+    activities,
+    contacts,
+    contactRoles,
+    championGaps,
+  }
 }
 
 // --- Writes ------------------------------------------------------------------
@@ -341,6 +378,19 @@ export interface UserPatch {
   isActive?: boolean
   /** A reset. Set by an administrator without the current password — see the API's own note. */
   password?: string
+  /**
+   * Who inherits this person's accounts and open deals. Sent with `isActive: false` when an
+   * administrator hands the book over; omitted when they deliberately leave it where it is.
+   */
+  reassignTo?: Id
+}
+
+/** What somebody is holding, so deactivating them is a decision rather than a surprise. */
+export interface OwnershipSummary {
+  userId: Id
+  accounts: number
+  openDeals: number
+  openDealValue: number
 }
 
 function toTeamMember(dto: UserDto): TeamMember {
@@ -361,6 +411,14 @@ export const teamApi = {
   create: (input: NewUser) => api.post<UserDto>('/auth/users', input).then(toTeamMember),
   update: (userId: Id, patch: UserPatch) =>
     api.patch<UserDto>(`/auth/users/${userId}`, patch).then(toTeamMember),
+
+  ownership: (userId: Id) =>
+    api
+      .get<{ userId: Id; accounts: number; openDeals: number; openDealValue: string }>(
+        `/auth/users/${userId}/ownership`,
+      )
+      // Money crosses as a string, as it does everywhere else in this API.
+      .then((dto) => ({ ...dto, openDealValue: Number(dto.openDealValue) }) as OwnershipSummary),
 }
 
 export const createApi = {
@@ -423,6 +481,21 @@ export const writeApi = {
 
 // --- Pipeline administration (admin only) ------------------------------------
 
+/**
+ * A stage as it is created.
+ *
+ * No champion field. The gate is one position on the *pipeline*, sent once as
+ * `championGatePosition` when the pipeline is created — a per-stage flag could describe two gates.
+ */
+export interface NewStage {
+  name: string
+  shortName?: string
+  probability?: number
+  color?: string
+  kind?: StageKind
+  expectedDays?: number | null
+}
+
 export interface StagePatchBody {
   name?: string
   shortName?: string
@@ -430,7 +503,10 @@ export interface StagePatchBody {
   color?: string
   kind?: StageKind
   wipLimit?: number | null
-  requiresChampion?: boolean
+  // `expectedDays` is editable and the champion gate is not, and the difference is the point: one is an
+  // expectation that nothing is refused for, the other is a rule deals have already been judged against.
+  // The API refuses a gate outright, so having it here would only let a caller build a request that fails.
+  expectedDays?: number | null
   /**
    * The complete desired list when sent; omitted leaves the checklist alone.
    *
@@ -443,9 +519,31 @@ export interface StagePatchBody {
 }
 
 export const pipelineApi = {
-  create: (name: string, copyStagesFrom?: Id) =>
+  /**
+   * Creates a pipeline, declaring its stages and its champion gate.
+   *
+   * All of it is here because the gate can only be set at creation — the API refuses it on an update. A
+   * create that could only take a name would leave a new pipeline permanently ungateable.
+   *
+   * `championGatePosition` is 1-based against the stage list as sent, and must name an open stage that is
+   * not the last one: the rule applies to moving *past* the gate, so a gate on the final open stage could
+   * never fire. The API validates both and answers 422.
+   *
+   * `stages` and `copyStagesFrom` are alternatives; sending both is a 400 rather than a silent choice
+   * between two complete descriptions. A copy carries the source's gate, so sending one alongside
+   * `copyStagesFrom` is refused too.
+   */
+  create: (
+    name: string,
+    options: { copyStagesFrom?: Id; stages?: NewStage[]; championGatePosition?: number | null } = {},
+  ) =>
     api
-      .post<PipelineDto>('/pipelines', { name, copyStagesFrom: copyStagesFrom ?? null })
+      .post<PipelineDto>('/pipelines', {
+        name,
+        copyStagesFrom: options.copyStagesFrom ?? null,
+        stages: options.stages ?? null,
+        championGatePosition: options.championGatePosition ?? null,
+      })
       .then(toPipeline),
 
   update: (pipelineId: Id, patch: { name?: string }) =>
@@ -454,8 +552,14 @@ export const pipelineApi = {
   duplicate: (pipelineId: Id, name: string) =>
     api.post<PipelineDto>(`/pipelines/${pipelineId}/duplicate`, { name }).then(toPipeline),
 
-  addStage: (pipelineId: Id, name: string) =>
-    api.post<PipelineDto>(`/pipelines/${pipelineId}/stages`, { name }).then(toPipeline),
+  /**
+   * Adds a stage to an existing pipeline.
+   *
+   * The gate is not settable here, and cannot be: it is a position, and a stage added in the middle would
+   * shift what that position means for every deal already past it.
+   */
+  addStage: (pipelineId: Id, stage: NewStage) =>
+    api.post<PipelineDto>(`/pipelines/${pipelineId}/stages`, stage).then(toPipeline),
 
   updateStage: (pipelineId: Id, stageId: Id, patch: StagePatchBody) =>
     api.patch<PipelineDto>(`/pipelines/${pipelineId}/stages/${stageId}`, patch).then(toPipeline),
@@ -584,8 +688,14 @@ export const reminderApi = {
 export interface AnalyticsQuery {
   pipelineId?: Id | null
   ownerId?: Id | null
-  closeFrom?: string | null
-  closeTo?: string | null
+  /**
+   * Which window the whole screen describes, by deal *created* date.
+   *
+   * This replaced an explicit close-date range. A range is two inputs that can be set to something
+   * nonsensical and has no answer to "compared with what"; a named calendar period has a defined
+   * predecessor, which is what the creation panel needs to be worth reading.
+   */
+  period?: AnalyticsPeriod | null
 }
 
 /**
@@ -598,8 +708,7 @@ export interface AnalyticsQuery {
 const ANALYTICS_PARAMS: Record<keyof AnalyticsQuery, string> = {
   pipelineId: 'pipeline_id',
   ownerId: 'owner_id',
-  closeFrom: 'close_from',
-  closeTo: 'close_to',
+  period: 'period',
 }
 
 export const analyticsApi = {
@@ -678,4 +787,59 @@ export const contactRoleApi = {
     api.patch<ContactRole>(`/contacts/roles/${roleId}`, patch),
   /** Refused with 409 if the role is built in, or still assigned on any deal. */
   remove: (roleId: Id) => api.delete<{ detail: string }>(`/contacts/roles/${roleId}`),
+}
+
+
+// --- Lemlist ------------------------------------------------------------------
+
+/**
+ * The lemlist integration.
+ *
+ * Every read here hits our own database, not lemlist. That is the whole design: the Contacts page must not
+ * inherit lemlist's latency, its 20-requests-per-2-seconds workspace budget, or its downtime. Only
+ * `connect` and `sync` talk to lemlist, and both are explicit user actions.
+ */
+export const lemlistApi = {
+  status: () => api.get<LemlistStatus>('/integrations/lemlist/status'),
+
+  connect: (apiKey: string) =>
+    api.post<LemlistStatus>('/integrations/lemlist/connect', { apiKey }),
+
+  disconnect: () => api.delete<{ detail: string }>('/integrations/lemlist/connect'),
+
+  registerWebhook: () => api.post<{ detail: string }>('/integrations/lemlist/webhook/register'),
+
+  /** The mirrored campaign list. Free — reads our tables, never lemlist. */
+  campaigns: () => api.get<LemlistCampaign[]>('/integrations/lemlist/campaigns'),
+
+  /** Asks lemlist whether the campaign list has changed. One or two requests, so it stays quick. */
+  refreshCampaigns: () => api.post<LemlistCampaign[]>('/integrations/lemlist/campaigns/refresh'),
+
+  /**
+   * Imports one campaign's leads and activity, and waits for it.
+   *
+   * Slow by nature: paced under lemlist's rate limit, a large campaign takes a while. One campaign at a
+   * time is what keeps it inside a request at all — importing the whole workspace at once did not fit.
+   */
+  importCampaign: (campaignId: Id, full = true) =>
+    api.post<LemlistSyncResult>(
+      `/integrations/lemlist/campaigns/${campaignId}/import?full=${full}`,
+    ),
+
+  prospects: (params: { campaignId?: Id; state?: string; search?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (params.campaignId) query.set('campaign_id', params.campaignId)
+    if (params.state) query.set('state', params.state)
+    if (params.search) query.set('search', params.search)
+    const suffix = query.toString() ? `?${query}` : ''
+    return api.get<LemlistProspect[]>(`/integrations/lemlist/contacts${suffix}`)
+  },
+
+  timeline: (prospectId: Id) =>
+    api.get<LemlistEngagement[]>(`/integrations/lemlist/contacts/${prospectId}/timeline`),
+
+  promote: (prospectId: Id, accountId: Id) =>
+    api.post<{ detail: string }>(`/integrations/lemlist/contacts/${prospectId}/promote`, {
+      accountId,
+    }),
 }

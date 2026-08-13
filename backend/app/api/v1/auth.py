@@ -19,6 +19,7 @@ from app.models.enums import UserRole
 from app.repositories import users as users_repo
 from app.schemas.auth import (
     AccessToken,
+    OwnershipSummary,
     PasswordChange,
     RefreshRequest,
     Token,
@@ -139,6 +140,25 @@ async def create_user(db: DbSession, _: AdminUser, payload: UserCreate) -> User:
     return user
 
 
+@router.get("/users/{user_id}/ownership", response_model=OwnershipSummary)
+async def read_ownership(db: DbSession, _: AdminUser, user_id: uuid.UUID) -> OwnershipSummary:
+    """
+    What this person holds, so the deactivate dialog can say what is at stake before it is confirmed.
+
+    Deactivating somebody used to be silent about their book, and the consequence is not obvious: deals
+    stay owner-scoped, so the whole thing becomes invisible to every rep and visible only to
+    administrators, while still counting in the forecast.
+    """
+    user = await users_repo.get(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such user")
+
+    accounts, open_deals, value = await users_repo.ownership(db, user_id)
+    return OwnershipSummary(
+        user_id=user_id, accounts=accounts, open_deals=open_deals, open_deal_value=str(value)
+    )
+
+
 @router.patch("/users/{user_id}", response_model=UserRead)
 async def update_user(
     db: DbSession, admin: AdminUser, user_id: uuid.UUID, payload: UserUpdate
@@ -179,6 +199,26 @@ async def update_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot deactivate your own account.",
         )
+
+    # Ownership moves before the deactivation lands, in the same transaction: a handover that half
+    # happened would leave a signed-out person holding deals nobody else can see.
+    if payload.reassign_to is not None:
+        if payload.reassign_to == user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reassigning somebody's work to themselves changes nothing.",
+            )
+        successor = await users_repo.get(db, payload.reassign_to)
+        if successor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="No such user to reassign to"
+            )
+        if not successor.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{successor.full_name} is deactivated and cannot take over a book of work.",
+            )
+        await users_repo.reassign_ownership(db, user.id, successor.id)
 
     if payload.email is not None and payload.email.lower() != user.email.lower():
         clash = await users_repo.get_by_email(db, payload.email)

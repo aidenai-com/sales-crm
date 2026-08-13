@@ -44,6 +44,25 @@ class UserUpdate(PayloadModel):
     role: UserRole | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=72)
+    #: Who inherits this person's accounts and deals. Sent alongside `is_active: false` when an
+    #: administrator hands the book over; omitted when they deliberately leave it where it is.
+    reassign_to: uuid.UUID | None = None
+
+
+class OwnershipSummary(ORMModel):
+    """
+    What a person is holding, so deactivating them is a decision rather than a surprise.
+
+    `open_deal_value` is a string for the same reason money is everywhere else in this API: a decimal
+    that survives the trip. Accounts are counted separately from deals because they carry the contacts
+    and business units, so an account left with a deactivated owner is a quieter but longer-lived
+    problem than a deal.
+    """
+
+    user_id: uuid.UUID
+    accounts: int
+    open_deals: int
+    open_deal_value: str
 
 
 class Token(ORMModel):

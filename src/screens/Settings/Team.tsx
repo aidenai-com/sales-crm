@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Id } from '@/types/domain'
-import { teamApi, type TeamMember, type UserPatch } from '@/api/endpoints'
+import {
+  teamApi,
+  type OwnershipSummary,
+  type TeamMember,
+  type UserPatch,
+} from '@/api/endpoints'
 import { errorMessage } from '@/api/client'
 import { useAuth } from '@/app/auth'
 import { useToast } from '@/app/toast'
 import { useStore } from '@/data/store'
 import { cn } from '@/lib/cn'
+import { compactMoney } from '@/lib/format'
 import { Button } from '@/components/ui/Button'
 import { Card, EmptyState, SectionHeader } from '@/components/ui/Card'
 import { Field, Select, TextInput } from '@/components/ui/Field'
@@ -150,6 +156,7 @@ export function Team() {
                   <EditRow
                     member={member}
                     isSelf={member.id === user?.id}
+                    successors={active.filter((row) => row.id !== member.id)}
                     onCancel={() => setEditing(null)}
                     onSaved={(updated) => {
                       replace(updated)
@@ -187,6 +194,7 @@ export function Team() {
                     <EditRow
                       member={member}
                       isSelf={member.id === user?.id}
+                      successors={active.filter((row) => row.id !== member.id)}
                       onCancel={() => setEditing(null)}
                       onSaved={(updated) => {
                         replace(updated)
@@ -267,14 +275,32 @@ function MemberRow({
  * untouched, so two administrators editing different things about the same person do not overwrite each
  * other, and an empty password box is never mistaken for "set the password to nothing".
  */
+/** How much work is at stake, in a phrase rather than a table. */
+function describeBook(ownership: OwnershipSummary): string {
+  const parts: string[] = []
+  if (ownership.openDeals > 0) {
+    parts.push(
+      `${ownership.openDeals} open ${ownership.openDeals === 1 ? 'deal' : 'deals'}` +
+        (ownership.openDealValue > 0 ? ` worth ${compactMoney(ownership.openDealValue)}` : ''),
+    )
+  }
+  if (ownership.accounts > 0) {
+    parts.push(`${ownership.accounts} ${ownership.accounts === 1 ? 'account' : 'accounts'}`)
+  }
+  return parts.join(' and ')
+}
+
 function EditRow({
   member,
   isSelf,
+  successors,
   onCancel,
   onSaved,
 }: {
   member: TeamMember
   isSelf: boolean
+  /** Active colleagues who could take the book over. A deactivated person cannot inherit one. */
+  successors: TeamMember[]
   onCancel: () => void
   onSaved: (updated: TeamMember) => void
 }) {
@@ -287,6 +313,30 @@ function EditRow({
   const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  //: Who inherits the book. Empty means "leave it with them", which is a real choice and not a default
+  //: somebody fell into — the panel below says what it costs.
+  const [reassignTo, setReassignTo] = useState('')
+  const [ownership, setOwnership] = useState<OwnershipSummary | null>(null)
+
+  const deactivating = member.isActive && !isActive
+
+  // Asked only when it matters. Loading it for every row opened would be a request per edit to answer a
+  // question most edits never ask.
+  useEffect(() => {
+    if (!deactivating || ownership) return
+    let live = true
+    teamApi
+      .ownership(member.id)
+      .then((found) => {
+        if (live) setOwnership(found)
+      })
+      .catch(() => {
+        // Non-fatal: the handover is still offered, just without the numbers behind it.
+      })
+    return () => {
+      live = false
+    }
+  }, [deactivating, ownership, member.id])
 
   const patch: UserPatch = {}
   if (fullName.trim() !== member.name) patch.fullName = fullName.trim()
@@ -298,6 +348,9 @@ function EditRow({
   if (role !== member.role) patch.role = role
   if (isActive !== member.isActive) patch.isActive = isActive
   if (password.length > 0) patch.password = password
+  // Only on the way out. Reassigning without deactivating is a separate operation, and folding it in
+  // here would let an edit to somebody's job title quietly move their whole book.
+  if (deactivating && reassignTo) patch.reassignTo = reassignTo
 
   const passwordTooShort = password.length > 0 && password.length < MIN_PASSWORD
   const passwordTooLong = password.length > MAX_PASSWORD
@@ -398,6 +451,42 @@ function EditRow({
           </Select>
         </Field>
       </div>
+
+      {deactivating && (
+        <div className="rounded-lg border border-signal-blue bg-badge-fill p-16">
+          <p className="text-body-sm font-semibold text-ink-navy">
+            {ownership === null
+              ? `What happens to ${member.name}'s work`
+              : ownership.openDeals === 0 && ownership.accounts === 0
+                ? `${member.name} owns nothing that needs a new home`
+                : `${member.name} owns ${describeBook(ownership)}`}
+          </p>
+          <p className="mt-[2px] text-caption text-slate-gray">
+            Deals stay with their owner unless you move them, and a deal belonging to a deactivated person
+            is visible only to administrators — while still counting in the forecast. Closed deals keep
+            their owner either way, so who won what stays accurate.
+          </p>
+
+          {(ownership === null || ownership.openDeals > 0 || ownership.accounts > 0) && (
+            <div className="mt-16">
+              <Field label="Hand the book over to">
+                <Select
+                  value={reassignTo}
+                  disabled={saving}
+                  onChange={(event) => setReassignTo(event.target.value)}
+                >
+                  <option value="">Leave it assigned to them</option>
+                  {successors.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="border-t border-hairline pt-16">
         <Field

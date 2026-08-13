@@ -26,7 +26,6 @@ interface RepDto {
   role: 'admin' | 'rep'
   openCount: number
   openValue: string
-  weightedValue: string
   atRiskCount: number
   closingThisWeekCount: number
   wonCount: number
@@ -46,7 +45,6 @@ interface TeamOverviewDto {
   reps: RepDto[]
   staleDeals: StaleDealDto[]
   totalOpenValue: string
-  totalWeightedValue: string
   totalAtRisk: number
 }
 
@@ -67,7 +65,6 @@ export interface RepPerformance {
   role: 'admin' | 'rep'
   openCount: number
   openValue: number
-  weightedValue: number
   atRiskCount: number
   closingThisWeekCount: number
   wonCount: number
@@ -92,7 +89,6 @@ export interface TeamOverview {
   reps: RepPerformance[]
   staleDeals: StaleDeal[]
   totalOpenValue: number
-  totalWeightedValue: number
   totalAtRisk: number
 }
 
@@ -104,7 +100,6 @@ export const teamApi = {
         reps: dto.reps.map((r) => ({
           ...r,
           openValue: Number(r.openValue),
-          weightedValue: Number(r.weightedValue),
           wonValue: Number(r.wonValue),
           stageSlices: r.stageSlices.map((s) => ({ ...s, value: Number(s.value) })),
         })),
@@ -119,7 +114,6 @@ export const teamApi = {
           daysSinceTouch: s.daysSinceTouch,
         })),
         totalOpenValue: Number(dto.totalOpenValue),
-        totalWeightedValue: Number(dto.totalWeightedValue),
         totalAtRisk: dto.totalAtRisk,
       }),
     ),

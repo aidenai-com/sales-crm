@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import Field, computed_field
 
 from app.models.enums import ActivityKind, ActivitySubjectType, Health
+from app.schemas.analytics import AgeingRead
 from app.schemas.auth import UserRead
 from app.schemas.common import ORMModel, PayloadModel
 from app.schemas.contact import DealContactAssignment
@@ -111,11 +112,20 @@ class DealDetail(DealRead):
     owner_name: str
     is_open: bool
     last_activity_at: datetime | None
+    #: How long this deal has been where it is, against what the process allows. Null on closed deals.
+    #:
+    #: Carried on the deal itself rather than computed per screen, so the deal page, the deals index, the
+    #: drawer and the analytics report all state the same number. Two client-side derivations of "days in
+    #: stage" would drift, and the first sign of it would be one screen calling a deal stuck while another
+    #: calls it fine.
+    ageing: AgeingRead | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def weighted_value(self) -> Decimal:
-        return (self.value * self.stage_probability) / 100
+    # There is deliberately no `weighted_value`. It was `value * stage_probability / 100`, and that
+    # multiplication was not meaningful: a stage's percentage describes how far along the deal is, not the
+    # likelihood of winning it. Multiplying money by a progress score produces a figure that looks like
+    # expected revenue and is not, so it is gone rather than renamed — a wrong number with an honest label
+    # is still a wrong number, and this one was printed on the deal page, the deals index, the dashboard,
+    # the team screen and inside the assistant's answers.
 
 
 class DealCreate(PayloadModel):
@@ -230,7 +240,6 @@ class AccountNode(ORMModel):
 
 class DashboardMetrics(ORMModel):
     open_pipeline_value: Decimal
-    weighted_pipeline_value: Decimal
     advanced_stage_count: int
     closing_this_week_count: int
     needs_attention_count: int

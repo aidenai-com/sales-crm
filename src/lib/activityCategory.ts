@@ -23,6 +23,9 @@ export const activityCategory: Record<ActivityKind, ActivityCategory> = {
   // An escalation, not work on the deal. Grouped with the machine-written entries because
   // like them it records that something happened *to* the deal rather than on it.
   nudge: 'system',
+  // Bookkeeping about who is involved, written by the server. Filing a champion is not the same act as
+  // speaking to one, and the timeline should not let the two look alike.
+  'contact-change': 'system',
 }
 
 export const activityKindLabel: Record<ActivityKind, string> = {
@@ -33,6 +36,7 @@ export const activityKindLabel: Record<ActivityKind, string> = {
   document: 'Document',
   'stage-change': 'Stage change',
   nudge: 'Nudge',
+  'contact-change': 'People',
 }
 
 interface CategoryStyle {

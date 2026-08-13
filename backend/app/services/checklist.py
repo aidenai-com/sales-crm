@@ -12,8 +12,9 @@ on the board works exactly as before, on a stage with a half-finished checklist.
 
 import logging
 import uuid
+from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -319,3 +320,74 @@ async def try_advance(
     await db.flush()
     logger.info("Deal %s auto-advanced to %s", deal.id, target.name)
     return target, previous_id
+
+
+@dataclass(frozen=True)
+class StageActions:
+    """
+    The deliverables on a deal's *current* stage, and the first one still outstanding.
+
+    This is what answers "what action is required" without inventing advice: the deliverables are the actions
+    a rep has already been told the deal needs, so the next unticked one is the next action by definition.
+
+    `total == 0` is a distinct and important state. It does not mean the deal is done — it means the stage
+    defines no deliverables at all, which is an administrator's problem rather than a rep's, and the reports
+    say so in those words instead of showing an empty cell.
+    """
+
+    total: int
+    done: int
+    next_text: str | None
+
+    @property
+    def outstanding(self) -> int:
+        return self.total - self.done
+
+
+async def actions_by_deal(db: AsyncSession) -> dict[uuid.UUID, StageActions]:
+    """
+    Every deal's current-stage checklist progress, in two queries rather than two per deal.
+
+    Bulk because the risk report needs this for the whole book. The per-deal `deal_checklist` above walks
+    every stage and loads attachments and authors, which is right for a deal page and far too much for a
+    list of a hundred rows.
+
+    Deals whose stage has no deliverables are returned with `total = 0` rather than omitted, so a caller can
+    tell "nothing defined here" from "not loaded".
+    """
+    totals = await db.execute(
+        select(StageDeliverable.stage_id, func.count(StageDeliverable.id)).group_by(
+            StageDeliverable.stage_id
+        )
+    )
+    per_stage = {stage_id: count for stage_id, count in totals.all()}
+
+    # Outstanding deliverables per deal: the current stage's list, minus what this deal has ticked. Ordered
+    # by position so the first row per deal is genuinely the next action rather than an arbitrary one.
+    outstanding = await db.execute(
+        select(Deal.id, StageDeliverable.text, StageDeliverable.position)
+        .join(StageDeliverable, StageDeliverable.stage_id == Deal.stage_id)
+        .outerjoin(
+            DealDeliverableCompletion,
+            (DealDeliverableCompletion.deal_id == Deal.id)
+            & (DealDeliverableCompletion.stage_deliverable_id == StageDeliverable.id),
+        )
+        .where(DealDeliverableCompletion.id.is_(None))
+        .order_by(Deal.id, StageDeliverable.position)
+    )
+
+    pending: dict[uuid.UUID, list[str]] = {}
+    for deal_id, text, _position in outstanding.all():
+        pending.setdefault(deal_id, []).append(text)
+
+    stages = await db.execute(select(Deal.id, Deal.stage_id))
+    result: dict[uuid.UUID, StageActions] = {}
+    for deal_id, stage_id in stages.all():
+        total = per_stage.get(stage_id, 0)
+        waiting = pending.get(deal_id, [])
+        result[deal_id] = StageActions(
+            total=total,
+            done=max(total - len(waiting), 0),
+            next_text=waiting[0] if waiting else None,
+        )
+    return result

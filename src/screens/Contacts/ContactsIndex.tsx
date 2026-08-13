@@ -8,6 +8,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { Segmented } from '@/components/ui/Segmented'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { ContactRow } from './ContactRow'
+import { ProspectsPanel } from './ProspectsPanel'
 
 /**
  * Every person we know, across every company.
@@ -18,15 +19,23 @@ import { ContactRow } from './ContactRow'
  *
  * The side filter is customer versus partner, because those two are answered differently: a customer
  * contact is somebody to sell to, a partner contact somebody to sell *with*.
+ *
+ * Two tabs, because there are two kinds of person here and they are not interchangeable. **Directory** is
+ * people filed against a company somebody decided to work — they can go on a deal and hold a role.
+ * **Prospects** is the outreach list imported from lemlist, most of which will never become the first kind.
+ * Merging them would fill the directory with cold names and make the champion gate meaningless; a prospect
+ * crosses over only when somebody files them, which is what "File as contact" does.
  */
 
 type SideFilter = 'all' | ContactType
+type Tab = 'directory' | 'prospects'
 
 export function ContactsIndex() {
   const { snapshot, status } = useStore()
   const { openCreate } = useCreation()
   const { select } = useSelection()
 
+  const [tab, setTab] = useState<Tab>('directory')
   const [search, setSearch] = useState('')
   const [side, setSide] = useState<SideFilter>('all')
   const [onlyIncomplete, setOnlyIncomplete] = useState(false)
@@ -86,6 +95,31 @@ export function ContactsIndex() {
         <Button onClick={() => openCreate({ kind: 'contact' })}>New contact</Button>
       </header>
 
+      <div className="pb-24">
+        <Segmented
+          label="Which people"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'directory', label: 'Directory', count: snapshot.contacts.length },
+            { value: 'prospects', label: 'Prospects' },
+          ]}
+        />
+      </div>
+
+      {tab === 'prospects' ? (
+        <ProspectsPanel />
+      ) : (
+        <DirectoryView />
+      )}
+    </div>
+  )
+
+  // Kept as a closure rather than a separate component: it reads a dozen pieces of the state above, and
+  // threading all of them through props would be more code saying less.
+  function DirectoryView() {
+    return (
+      <>
       <div className="flex flex-wrap items-center gap-12 pb-24">
         <div className="min-w-[240px] flex-1">
           <SearchField
@@ -177,8 +211,9 @@ export function ContactsIndex() {
           ))}
         </div>
       )}
-    </div>
-  )
+      </>
+    )
+  }
 }
 
 function EmptyState({ hasAny, onCreate }: { hasAny: boolean; onCreate: () => void }) {

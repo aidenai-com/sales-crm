@@ -34,16 +34,19 @@ async def _require_template(db: DbSession, pipeline_id: uuid.UUID) -> PipelineTe
     return template
 
 
-async def _reload_template(db: DbSession, pipeline_id: uuid.UUID) -> PipelineTemplate:
+async def _reload_template(db: DbSession, pipeline_id: uuid.UUID) -> PipelineTemplateRead:
     """
-    Re-reads a template after a write, for the response.
+    Re-reads a template after a write, and serialises it for the response.
 
-    Necessary because `expire_on_commit` is False: a reorder rewrites `position` values
-    correctly, but the already-loaded `stages` collection keeps its previous order, so the
-    response would list them out of sequence. Detaching forces a fresh, ordered load.
+    The re-read is necessary because `expire_on_commit` is False: a reorder rewrites `position` values
+    correctly, but the already-loaded `stages` collection keeps its previous order, so the response would
+    list them out of sequence. Detaching forces a fresh, ordered load.
+
+    Serialising here rather than letting FastAPI read the ORM object is what fills in the per-stage champion
+    fields, which are derived from the pipeline's single gate position and exist on no column.
     """
     db.expunge_all()
-    return await _require_template(db, pipeline_id)
+    return service.template_read(await _require_template(db, pipeline_id))
 
 
 def _require_stage(template: PipelineTemplate, stage_id: uuid.UUID) -> Stage:
@@ -60,13 +63,15 @@ def _require_stage(template: PipelineTemplate, stage_id: uuid.UUID) -> Stage:
 
 
 @router.get("", response_model=list[PipelineTemplateRead])
-async def list_pipelines(db: DbSession, _: CurrentUser) -> list[PipelineTemplate]:
-    return await service.list_templates(db)
+async def list_pipelines(db: DbSession, _: CurrentUser) -> list[PipelineTemplateRead]:
+    return [service.template_read(template) for template in await service.list_templates(db)]
 
 
 @router.get("/{pipeline_id}", response_model=PipelineTemplateRead)
-async def read_pipeline(db: DbSession, _: CurrentUser, pipeline_id: uuid.UUID) -> PipelineTemplate:
-    return await _require_template(db, pipeline_id)
+async def read_pipeline(
+    db: DbSession, _: CurrentUser, pipeline_id: uuid.UUID
+) -> PipelineTemplateRead:
+    return service.template_read(await _require_template(db, pipeline_id))
 
 
 # --- Write: admin only (spec 6.3) -------------------------------------------
@@ -75,7 +80,23 @@ async def read_pipeline(db: DbSession, _: CurrentUser, pipeline_id: uuid.UUID) -
 @router.post("", response_model=PipelineTemplateRead, status_code=status.HTTP_201_CREATED)
 async def create_pipeline(
     db: DbSession, _: AdminUser, payload: PipelineTemplateCreate
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
+    if payload.copy_stages_from is not None and payload.stages is not None:
+        # Refused rather than picking one. Both are complete descriptions of the stage list, and silently
+        # ignoring one of them would be silently ignoring stages somebody configured.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Give either stages to create or a pipeline to copy them from, not both.",
+        )
+
+    if payload.copy_stages_from is not None and payload.champion_gate_position is not None:
+        # A copy carries the source's gate. Accepting a different one here would need the position validated
+        # against stages this payload does not contain, and quietly overriding it would be worse.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A copied pipeline keeps the champion gate of the pipeline it was copied from.",
+        )
+
     try:
         if payload.copy_stages_from is not None:
             # Starting from an existing pipeline's stages is the common case: most new
@@ -83,7 +104,9 @@ async def create_pipeline(
             source = await _require_template(db, payload.copy_stages_from)
             template = await service.duplicate_template(db, source, payload.name)
         else:
-            template = await service.create_template(db, payload.name)
+            template = await service.create_template(
+                db, payload.name, payload.stages, payload.champion_gate_position
+            )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -94,7 +117,7 @@ async def create_pipeline(
 @router.patch("/{pipeline_id}", response_model=PipelineTemplateRead)
 async def update_pipeline(
     db: DbSession, _: AdminUser, pipeline_id: uuid.UUID, payload: PipelineTemplateUpdate
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     template = await _require_template(db, pipeline_id)
 
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -111,7 +134,7 @@ async def update_pipeline(
 @router.post("/{pipeline_id}/duplicate", response_model=PipelineTemplateRead, status_code=201)
 async def duplicate_pipeline(
     db: DbSession, _: AdminUser, pipeline_id: uuid.UUID, payload: PipelineTemplateDuplicate
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     """Duplicating is the supported way to add a new pipeline type (spec 6.3)."""
     source = await _require_template(db, pipeline_id)
     try:
@@ -147,7 +170,7 @@ async def delete_pipeline(db: DbSession, _: AdminUser, pipeline_id: uuid.UUID) -
 @router.post("/{pipeline_id}/stages", response_model=PipelineTemplateRead, status_code=201)
 async def add_stage(
     db: DbSession, _: AdminUser, pipeline_id: uuid.UUID, payload: StageCreate
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     template = await _require_template(db, pipeline_id)
     await service.add_stage(db, template, payload)
     await db.commit()
@@ -161,7 +184,7 @@ async def update_stage(
     pipeline_id: uuid.UUID,
     stage_id: uuid.UUID,
     payload: StageUpdate,
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     template = await _require_template(db, pipeline_id)
     await service.update_stage(db, _require_stage(template, stage_id), payload)
     await db.commit()
@@ -175,7 +198,7 @@ async def reorder_stage(
     pipeline_id: uuid.UUID,
     stage_id: uuid.UUID,
     payload: StageReorder,
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     template = await _require_template(db, pipeline_id)
     _require_stage(template, stage_id)
     await service.reorder_stage(db, template, stage_id, payload.to_index)
@@ -186,7 +209,7 @@ async def reorder_stage(
 @router.delete("/{pipeline_id}/stages/{stage_id}", response_model=PipelineTemplateRead)
 async def delete_stage(
     db: DbSession, _: AdminUser, pipeline_id: uuid.UUID, stage_id: uuid.UUID
-) -> PipelineTemplate:
+) -> PipelineTemplateRead:
     """
     Refuses while deals occupy the stage, reporting the count so the client can offer to
     reassign first (spec 6.3). Deals are never silently orphaned.

@@ -6,12 +6,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
 from app.core import permissions
-from app.models import Deal, DealContact, DealRole, Stage
+from app.models import Activity, ActivityKind, Deal, DealContact, DealRole, Stage
 from app.repositories import accounts as accounts_repo
 from app.repositories import contacts as contacts_repo
 from app.repositories import deals as deals_repo
 from app.schemas.common import Message
 from app.schemas.contact import (
+    ChampionGap,
     DealContactAssignment,
     DealContactCreate,
     DealContactUpdate,
@@ -36,7 +37,12 @@ async def _load_stage(db: DbSession, stage_id: uuid.UUID) -> Stage:
 
 async def _detail(db: DbSession, deal: Deal) -> DealDetail:
     last_activity = await deals_repo.last_activity_map(db)
-    return deal_detail(deal, last_activity)
+    stage_moves = await deals_repo.last_stage_change_map(db)
+    # The deal's own pipeline stages, for the cumulative expected-days sum ageing needs. Loaded here rather
+    # than reached through `deal.stage.pipeline`, which is not eagerly loaded and would lazy-load in async.
+    template = await pipeline_service.get_template(db, deal.pipeline_template_id)
+    stages = list(template.stages) if template is not None else []
+    return deal_detail(deal, last_activity, stage_moves=stage_moves, stages=stages)
 
 
 async def _require_visible_deal(db: DbSession, user, deal_id: uuid.UUID) -> Deal:
@@ -121,6 +127,28 @@ async def _resolve_roles(db: DbSession, role_ids: list[uuid.UUID]) -> list[uuid.
     return resolved
 
 
+def _log_people_change(db: DbSession, deal_id: uuid.UUID, actor_id: uuid.UUID, summary: str) -> None:
+    """
+    Records a change to the people or roles on a deal, in the deal's own timeline.
+
+    Added to the session, not committed: every caller is mid-transaction, so the activity lands with the
+    change it describes or not at all. A timeline claiming a champion was mapped by a request that was
+    then refused would be worse than no timeline.
+
+    `CONTACT_CHANGE` deliberately does not count as a touch — see `NON_TOUCH_KINDS`. Filing who is
+    involved is not contact with them, and a deal whose champion was named a month ago and never called
+    is precisely the deal the staleness flag exists to surface.
+    """
+    db.add(
+        Activity(
+            deal_id=deal_id,
+            kind=ActivityKind.CONTACT_CHANGE,
+            summary=summary,
+            author_id=actor_id,
+        )
+    )
+
+
 async def _people(db: DbSession, deal_id: uuid.UUID) -> DealPeople:
     """
     The whole picture for one deal: the roles it tracks, and the people on it.
@@ -160,7 +188,36 @@ async def list_deals(
         open_only=open_only,
     )
     last_activity = await deals_repo.last_activity_map(db)
-    return [deal_detail(deal, last_activity) for deal in found]
+    stage_moves = await deals_repo.last_stage_change_map(db)
+    # One template read for the whole list, keyed by pipeline: a deals index spans both pipelines, and asking
+    # per deal would be a query per row to compute a number that is the same for every row in that pipeline.
+    stages_by_pipeline = {
+        template.id: list(template.stages) for template in await pipeline_service.list_templates(db)
+    }
+    return [
+        deal_detail(
+            deal,
+            last_activity,
+            stage_moves=stage_moves,
+            stages=stages_by_pipeline.get(deal.pipeline_template_id, []),
+        )
+        for deal in found
+    ]
+
+
+@router.get("/champion-gaps", response_model=list[ChampionGap])
+async def list_champion_gaps(db: DbSession, user: CurrentUser) -> list[ChampionGap]:
+    """
+    Deals sitting in a stage whose champion requirement they do not meet.
+
+    Declared before `/{deal_id}`: routes match in order, and the parameterised one would otherwise
+    swallow this path and fail to parse "champion-gaps" as a UUID.
+
+    A separate call rather than a field on `DealDetail`. The gate needs the deal's contacts, which the
+    deal list does not load, and `DealDetail` is the response to every deal write — putting it there
+    would add a champion lookup to every rename.
+    """
+    return await contact_service.champion_gaps(db, user)
 
 
 @router.get("/{deal_id}", response_model=DealDetail)
@@ -307,10 +364,12 @@ async def add_deal_role(
     deal = await _require_visible_deal(db, user, deal_id)
     permissions.require_deal_owner(user, deal, "change the roles on a deal")
 
-    if await contacts_repo.get_role(db, payload.role_id) is None:
+    role = await contacts_repo.get_role(db, payload.role_id)
+    if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     db.add(DealRole(deal_id=deal_id, role_id=payload.role_id))
+    _log_people_change(db, deal_id, user.id, f"Now tracking the {role.name} role.")
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -339,12 +398,24 @@ async def remove_deal_role(
     if link is None or link.deal_id != deal_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not tracked on this deal")
 
-    await db.execute(
+    unmapped = await db.execute(
         update(DealContact)
         .where(DealContact.deal_id == deal_id, DealContact.role_id == link.role_id)
         .values(role_id=None)
     )
+    role_name = link.role.name
     await db.delete(link)
+
+    # The count is in the sentence because it is the surprising part: untracking a role quietly leaves
+    # people behind with no role, and somebody reading the timeline later needs to know that happened.
+    held = unmapped.rowcount or 0
+    _log_people_change(
+        db,
+        deal_id,
+        user.id,
+        f"Stopped tracking the {role_name} role."
+        + (f" {held} {'person' if held == 1 else 'people'} left without a role." if held else ""),
+    )
     await db.commit()
     return await _people(db, deal_id)
 
@@ -372,6 +443,18 @@ async def add_deal_contact(
         db.add(DealRole(deal_id=deal_id, role_id=payload.role_id))
 
     db.add(DealContact(deal_id=deal_id, contact_id=payload.contact_id, role_id=payload.role_id))
+
+    added = await contacts_repo.get(db, payload.contact_id)
+    role = (
+        await contacts_repo.get_role(db, payload.role_id) if payload.role_id is not None else None
+    )
+    _log_people_change(
+        db,
+        deal_id,
+        user.id,
+        f"Added {added.full_name} ({added.account.name})"  # type: ignore[union-attr]
+        + (f" as {role.name}." if role else ", role not decided yet."),
+    )
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -416,7 +499,22 @@ async def remap_deal_contact(
         if not await contacts_repo.deal_tracks_role(db, deal_id, payload.role_id):
             db.add(DealRole(deal_id=deal_id, role_id=payload.role_id))
 
+    # Captured before the change, so the sentence can say what it was as well as what it became.
+    was = link.role.name if link.role is not None else None
+    person = link.contact.full_name
+    now = (await contacts_repo.get_role(db, payload.role_id)).name if payload.role_id else None  # type: ignore[union-attr]
+
     link.role_id = payload.role_id
+    if now is None:
+        _log_people_change(
+            db, deal_id, user.id, f"{person} is no longer the {was}, and stays on the deal."
+            if was
+            else f"{person} still has no role."
+        )
+    elif was is None:
+        _log_people_change(db, deal_id, user.id, f"Mapped {person} as {now}.")
+    else:
+        _log_people_change(db, deal_id, user.id, f"{person} changed from {was} to {now}.")
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -436,9 +534,10 @@ async def remove_deal_contact(
     """
     Detaches one person from this deal. The contact itself is untouched, and the role stays tracked.
 
-    Removing a champion is allowed. The gate is on *entering* a stage, not on staying in one — a deal
-    already past qualification whose champion has left the company needs to record that, and refusing
-    the edit would only make the CRM say something untrue.
+    Removing a champion is allowed even when the deal's stage requires one. A deal whose champion has
+    left the company needs to record that, and refusing the edit would only make the CRM say something
+    untrue. What the gate does instead is refuse to let the deal *move on* until a champion is named
+    again, and the deal is flagged in the meantime — the constraint belongs on motion, not on honesty.
     """
     deal = await _require_visible_deal(db, user, deal_id)
     permissions.require_deal_owner(user, deal, "change who is on a deal")
@@ -447,6 +546,13 @@ async def remove_deal_contact(
     if link is None or link.deal_id != deal_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not on this deal")
 
+    _log_people_change(
+        db,
+        deal_id,
+        user.id,
+        f"Removed {link.contact.full_name}"
+        + (f" ({link.role.name}) from the deal." if link.role is not None else " from the deal."),
+    )
     await db.delete(link)
     await db.commit()
     return await _people(db, deal_id)
@@ -468,6 +574,18 @@ async def nudge_deal(db: DbSession, user: CurrentUser, deal_id: uuid.UUID) -> Nu
     deal = await deals_repo.get(db, deal_id)
     if deal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deal not found")
+
+    # A nudge is an email to a person. Sending one to a deactivated account would post mail nobody
+    # collects and log a reminder claiming somebody is chasing this — the deal would look attended to
+    # precisely because nobody can attend to it. The fix is a new owner, so that is what it says.
+    if not deal.owner.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{deal.owner.full_name} is deactivated, so a nudge would reach nobody. "
+                "Reassign this deal to chase it."
+            ),
+        )
 
     touched = (await deals_repo.last_activity_map(db)).get(deal.id)
 

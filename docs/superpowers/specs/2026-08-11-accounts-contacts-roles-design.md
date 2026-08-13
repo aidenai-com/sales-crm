@@ -382,3 +382,152 @@ restore.
 
 **Unverified:** nothing in this addendum has been driven in a browser. The Team screen, the Profile
 form, the inline company creation and the Active/All tabs are all unseen.
+
+---
+
+# Addendum, 2026-08-12: guard rails around the champion gate
+
+## The hole
+
+`assert_champion_ready` was called from one place — inside `move_deal_to_stage` — against the stage being
+**entered**. Nothing ever re-evaluated a deal sitting still. So moving a gate from stage 3 to stage 1 did
+not just fail to apply retroactively; it was **bypassed permanently for every existing deal**. A deal
+already in stage 1 entered before the flag existed, so it was never asked, and moving 1 → 2 consulted
+only stage 2's flag, which was off. The requirement could be satisfied by nobody and noticed by nothing.
+
+The seed data proved it: before any change, two deals were sitting in the gated stage without a complete
+champion.
+
+Two smaller faults came with it. A *backward* move into a newly gated stage was refused — a deal could be
+denied entry to a stage it had occupied for a month, at exactly the moment somebody was recording that it
+had slipped. And an admin toggling the flag on a stage holding forty deals saw the same thing as toggling
+it on an empty one.
+
+## The fix
+
+**A forward move is now checked against the stage it leaves as well as the one it enters**, departure
+first, so the refusal names the stage that actually caused it. That closes the walk-through hole and makes
+a newly-switched-on gate land at the next natural moment rather than in a bulk breakage.
+
+**A backward move is not checked at all.** Regressing a deal is a correction, usually made *because* the
+deal is in trouble; demanding a complete champion first would mean the only way to record a slipping deal
+accurately is to first do the thing that is not happening.
+
+**Compliance became a state.** `champion_gaps` returns every visible deal whose *current* stage
+requirement it fails — two queries for the whole book, `GET /deals/champion-gaps` — and `ChampionGap` is
+in the snapshot. It renders as a badge on deal cards and index rows and a full statement on the deal page
+and drawer. `champion_shortfall` builds the sentence for all three cases (entering / leaving / resting),
+so the warning shown now and the refusal hit later can never say different things.
+
+**The admin sees the cost first.** `GET /pipelines/{p}/stages/{s}/champion-impact` counts the deals in
+that stage without a complete champion, and the stage editor asks before switching the flag on — but only
+when the number is non-zero, because a dialog that always says "0 affected" is one people learn to
+dismiss. Turning it *off* is immediate: relaxing a rule cannot strand anybody. If the count fails to
+load, the edit proceeds — a courtesy must not become a gate.
+
+Staleness is handled at the three places that can change the answer: a stage move (the store), a
+champion being mapped or unmapped (`useDealPeople`), and a contact's details being edited
+(`updateContact`) — which is the ordinary way a blocked deal becomes unblocked.
+
+## Deactivated owners
+
+`deals.owner_id` is a plain FK, so deactivating somebody left their whole book intact and — because
+`scope_deals` is owner-scoped — **invisible to every rep and visible only to administrators, while still
+counting in the forecast.** The nudge path was worse: it targets `deal.owner`, so an admin chasing a stale
+deal mailed a deactivated address and logged a reminder implying somebody was on it.
+
+Deactivation now asks who inherits. `GET /auth/users/{id}/ownership` reports accounts, open deals and
+their value; `UserUpdate.reassign_to` moves them in the same transaction as the deactivation, so a
+half-completed handover cannot leave a signed-out person holding invisible deals. "Leave it assigned to
+them" stays available as an explicit, labelled choice.
+
+Open deals only. A won deal keeps its owner, because reassigning it would rewrite who closed it. Business
+units are untouched by design — they have no owner, their stewardship follows the account. Handing a book
+to a deactivated person is refused, and so is nudging a deactivated owner, which now says the deal needs
+reassigning instead.
+
+## Verified
+
+Typecheck clean, build passing, 133 frontend tests green. Probed live against the database: the gate
+moved onto stage 1, gaps went 2 → 4, a forward move refused with the departure stage named (both through
+`POST /stage` and `PATCH /deals`), a backward move into the gated stage allowed, impact reported 2 of 3
+deals failing, the gate restored and gaps back to 2. Handover: Dana's 4 accounts and 6 open deals ($13.28M)
+moved to Marcus in one call, handover to an inactive person refused. The database was reseeded afterwards.
+
+**Unverified:** none of this has been driven in a browser.
+
+---
+
+# Addendum, 2026-08-13: the champion gate is fixed at creation
+
+## Why configurable was the wrong answer
+
+Yesterday's addendum built guard rails around moving a gate: a departure check to close the walk-through
+hole, derived compliance so grandfathered deals were visible, and an impact count before switching one on.
+All of it worked. None of it addressed the real problem, which is that **a stage whose gate can change stops
+describing the deals inside it.**
+
+Switching a gate *on* creates deals that entered under one rule and live under another. Switching one *off*
+retires a requirement with no record it ever applied — so a deal that passed through gated is
+indistinguishable afterwards from one that never faced the gate. Warning before the change does not help,
+because the damage is to the history rather than to the moment.
+
+Setting it at creation has none of those problems, for one reason: **a stage being created holds no deals.**
+Whatever the flag says is true of every deal that will ever pass through it, from the first onwards. That is
+the whole argument, and it makes this a stricter design rather than merely a simpler one.
+
+The same reasoning is why adding a *new* stage may still declare a gate. A brand-new stage is empty by
+definition, so gating it cannot strand anything — every deal that ever enters does so through the gate.
+
+## What changed
+
+**`requires_champion` is gone from `StageUpdate`.** `PayloadModel` forbids unknown fields, so an attempt to
+send it is a 422 naming the field rather than a change quietly dropped. A caller who thinks they are moving a
+gate finds out they are not.
+
+**`PipelineTemplateCreate` gained `stages`** — the full list, in order, each declaring its own gate. Without
+it a new pipeline's original stages could never be gated at all, leaving the requirement reachable only on
+stages added later, which is a gap rather than a design. `stages` and `copy_stages_from` are alternatives;
+sending both is a 400 rather than a silent choice between two complete descriptions of the gates. Omitting
+both falls back to the built-in defaults. Copying carries the original's gates, because a copy you then have
+to re-gate by hand is not a copy.
+
+**The champion-impact endpoint, its repository helper and its schema are deleted.** They existed only to warn
+before a toggle that can no longer happen. `_complete_champion_exists` stays — `champion_gaps` still uses it.
+
+**What stays, and why.** The departure check and the derived gap list are *not* removed, because immutability
+does not make a deal's compliance permanent: a champion can be unmapped, removed, or have their phone number
+deleted after the deal entered. A deal can still sit in a gated stage without satisfying it, so it still has
+to be flagged and still has to be refused on the way out.
+
+## UI
+
+The pipeline creation panel is now a small wizard: name, then a stage list — prefilled with an opinionated
+draft gated at Qualify and Propose — where each open stage carries a **Champion required** toggle. Prefilled
+with gates on deliberately: a form that started with everything off would make "no gates anywhere" the path
+of least resistance for a decision nobody can revisit.
+
+**Add stage** became a form rather than a one-click add, for the same reason. One click that silently created
+an ungated stage would make the only moment the decision is available the one moment nobody is asked to make
+it.
+
+The stage editor shows the requirement **read-only** — a checkmark, what it means, and a line saying it was
+set at creation and cannot change. Shown rather than hidden, because "does this stage need a champion" is
+exactly what somebody opening a stage's settings wants to know.
+
+## Verified
+
+Typecheck clean, build passing, 133 frontend tests green. Thirteen checks on a **throwaway database created
+and dropped by the probe** — the developer database was never opened:
+
+creation honours per-stage gates · turning one off is refused 422 naming `requiresChampion` · turning one on
+is refused · an ordinary rename and probability edit still works with the gate untouched · gates survive a
+round trip · a new stage declares its own gate and lands in the right position · copying carries gates ·
+`stages` plus `copyStagesFrom` is a 400 with a readable message · an empty stage list is refused · omitting
+stages falls back to defaults · a rep gets 403 on both create and edit · the impact route is 404 ·
+`champion-gaps` still works.
+
+`tests/test_champion_gate.py` sets `requires_champion` on the ORM object rather than through the API, so
+immutability does not affect it. It remains outdated from the deal-roles change, as noted previously.
+
+**Unverified:** none of the three UI surfaces has been opened in a browser.

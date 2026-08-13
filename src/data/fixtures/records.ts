@@ -65,6 +65,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(5),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-2',
@@ -78,6 +80,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(48),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-3',
@@ -91,6 +95,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(96),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-4',
@@ -104,6 +110,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(31),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-5',
@@ -117,6 +125,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(70),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-6',
@@ -131,6 +141,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(9),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-7',
@@ -144,6 +156,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(58),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-8',
@@ -157,6 +171,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(84),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-9',
@@ -170,6 +186,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(26),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-10',
@@ -183,6 +201,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(6),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-11',
@@ -196,6 +216,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(140),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-12',
@@ -209,6 +231,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(120),
     createdAt: daysAgo(120),
     ownerId: 'per-1',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-13',
@@ -222,6 +246,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(77),
     createdAt: daysAgo(120),
     ownerId: 'per-5',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
 
   {
@@ -238,6 +264,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(37),
     createdAt: daysAgo(120),
     ownerId: 'per-2',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
 
   // --- Partner pipeline -------------------------------------------------------
@@ -254,6 +282,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(42),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-15',
@@ -267,6 +297,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(4),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-16',
@@ -280,6 +312,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(64),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-17',
@@ -293,6 +327,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(90),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-18',
@@ -306,6 +342,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysFromNow(155),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-19',
@@ -320,6 +358,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(3),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-20',
@@ -333,6 +373,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(18),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
   {
     id: 'deal-22',
@@ -346,6 +388,8 @@ export const deals: Deal[] = [
     expectedCloseDate: daysAgo(52),
     createdAt: daysAgo(120),
     ownerId: 'per-3',
+    // No stage history offline, so nothing to measure against.
+    ageing: null,
   },
 ]
 

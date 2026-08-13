@@ -60,6 +60,7 @@ DIRECT_STAGES = (
         "probability": 5,
         "color": RAMP[0],
         "kind": StageKind.OPEN,
+        "expected_days": 21,
         "entry_criteria": [
             "Fits a personalized ICP vertical",
             "Identifiable pain and trigger signal present",
@@ -94,6 +95,7 @@ DIRECT_STAGES = (
         "probability": 15,
         "color": RAMP[1],
         "kind": StageKind.OPEN,
+        "expected_days": 30,
         "entry_criteria": [
             "First meeting secured with Director+ in tech / digital transformation",
             "Stage-1 hypothesis validated by internal contact or partner intro",
@@ -130,6 +132,7 @@ DIRECT_STAGES = (
         "probability": 30,
         "color": RAMP[2],
         "kind": StageKind.OPEN,
+        "expected_days": 45,
         "entry_criteria": [
             "Stage-2 exit met: funded pain, exec sponsor named, budget pathway",
             "Champion identified and tested",
@@ -167,6 +170,7 @@ DIRECT_STAGES = (
         "probability": 55,
         "color": RAMP[3],
         "kind": StageKind.OPEN,
+        "expected_days": 45,
         "entry_criteria": [
             "TVE Plan approved and signed by both teams",
             "Delivery team assigned, briefed, available",
@@ -203,6 +207,7 @@ DIRECT_STAGES = (
         "probability": 75,
         "color": RAMP[4],
         "kind": StageKind.OPEN,
+        "expected_days": 30,
         "entry_criteria": [
             "Stage-4 exit met: POC success, ROI accepted, preferred status",
             "Full decision process mapped",
@@ -283,21 +288,33 @@ DIRECT_STAGES = (
 # R7: the partner pipeline includes an onboarding stage. Post-onboarding, the partner
 # enters the GTM motion represented by the Co-Sell stage onward.
 PARTNER_STAGES = (
-    {"name": "Identify", "short_name": "Identify", "probability": 5, "color": RAMP[0], "kind": StageKind.OPEN},
-    {"name": "Onboarding", "short_name": "Onboarding", "probability": 15, "color": RAMP[1], "kind": StageKind.OPEN},
-    {"name": "Enabled", "short_name": "Enabled", "probability": 30, "color": RAMP[2], "kind": StageKind.OPEN},
-    {"name": "Co-Sell Pipeline", "short_name": "Co-Sell", "probability": 50, "color": RAMP[3], "kind": StageKind.OPEN},
-    {"name": "Joint Proposal", "short_name": "Joint Proposal", "probability": 75, "color": RAMP[4], "kind": StageKind.OPEN},
+    {"name": "Identify", "short_name": "Identify", "probability": 5, "color": RAMP[0], "kind": StageKind.OPEN, "expected_days": 14},
+    {"name": "Onboarding", "short_name": "Onboarding", "probability": 15, "color": RAMP[1], "kind": StageKind.OPEN, "expected_days": 30},
+    {"name": "Enabled", "short_name": "Enabled", "probability": 30, "color": RAMP[2], "kind": StageKind.OPEN, "expected_days": 45},
+    {"name": "Co-Sell Pipeline", "short_name": "Co-Sell", "probability": 50, "color": RAMP[3], "kind": StageKind.OPEN, "expected_days": 30},
+    {"name": "Joint Proposal", "short_name": "Joint Proposal", "probability": 75, "color": RAMP[4], "kind": StageKind.OPEN, "expected_days": 21},
     {"name": "Closed Won", "short_name": "Closed Won", "probability": 100, "color": RAMP[5], "kind": StageKind.WON},
     {"name": "Closed Lost", "short_name": "Closed Lost", "probability": 0, "color": LOST_COLOR, "kind": StageKind.LOST},
 )
 
-# (name, stages)
-# "AidenAI Direct" is named for what it is — the methodology pipeline from the deck — so
-# that adding a second direct-sales pipeline later does not need an awkward name.
+# (name, stages, champion gate position)
+#
+# "AidenAI Direct" is named for what it is — the methodology pipeline from the deck — so that adding a second
+# direct-sales pipeline later does not need an awkward name.
+#
+# AidenAI Direct gates at position 2, its qualification stage. The rule reads "from qualification onward a
+# deal must have a named, reachable champion", which is where the methodology puts it: stage 1 is research,
+# where a rep legitimately has nobody yet, and everything after 2 is work that cannot honestly be done
+# without somebody on the inside. Terminal stages are exempt automatically.
+#
+# Partner Co-Sell is ungated on purpose. In a co-sell the partner *is* the relationship, so the champion
+# frequently sits on their side of it and is never a record in this CRM — a gate there would refuse moves for
+# a missing row rather than for a missing person.
+#
+# The gate is immutable after creation, so this is the one place either pipeline's gate is decided.
 PIPELINES = (
-    ("AidenAI Direct", DIRECT_STAGES),
-    ("Partner Co-Sell", PARTNER_STAGES),
+    ("AidenAI Direct", DIRECT_STAGES, 2),
+    ("Partner Co-Sell", PARTNER_STAGES, None),
 )
 
 # (key, name, account key, lead key, pipeline name, stage name, value,
@@ -401,15 +418,15 @@ CONTACTS = (
 #   an unfilled role      tracked because the deal needs one, nobody found yet — via the extra roles
 DEAL_PEOPLE = (
     # A complete champion: this deal can advance.
-    ("d1",  (), (("c-jpmc-1", "champion"), ("c-jpmc-2", "end-customer"))),
+    ("d1",  (), (("c-jpmc-1", "champion"), ("c-jpmc-2", None))),
     # Champion with no LinkedIn, so a gated stage will refuse it and say which field is missing.
-    ("d2",  ("executive-sponsor",), (("c-jpmc-3", "champion"), ("c-jpmc-2", "end-customer"))),
+    ("d2",  ("executive-sponsor",), (("c-jpmc-3", "champion"), ("c-jpmc-2", None))),
     # Nobody identified yet, and an exec sponsor still being looked for.
     ("d3",  ("executive-sponsor",), (("c-jpmc-2", None),)),
     ("d4",  (), (("c-bofa-1", "champion"), ("c-bofa-1", "executive-sponsor"))),
     ("d5",  (), (("c-bofa-2", "champion"),)),
     ("d6",  (), (("c-citi-1", "champion"), ("c-citi-2", None))),
-    ("d7",  ("champion",), (("c-citi-2", "end-customer"),)),
+    ("d7",  ("champion",), (("c-citi-2", None),)),
     ("d8",  (), (("c-wells-1", "champion"),)),
     ("d9",  (), (("c-hsbc-1", "champion"),)),
     ("d10", (), (("c-pru-1", "champion"),)),
@@ -431,6 +448,8 @@ DEAL_PEOPLE = (
 CONTACT_ROLES = (
     ("champion", "Champion", 1, True),
     ("executive-sponsor", "Executive Sponsor", 2, False),
-    ("end-customer", "End Customer", 3, False),
-    ("partner-contact", "Partner Contact", 4, False),
+    # No "End Customer". It restated `contacts.contact_type` — which side of the table somebody sits on
+    # is a property of the person, not a per-deal role — and having both let the two disagree. Dropped by
+    # migration a2f61d8c94e7.
+    ("partner-contact", "Partner Contact", 3, False),
 )
