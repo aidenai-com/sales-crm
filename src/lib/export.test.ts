@@ -26,6 +26,13 @@ describe('dealRows', () => {
       // and a per-row currency would advertise a flexibility the database refuses to store.
       'Value (USD)',
       'Expected close',
+      // Four columns rather than one "Age", because the basis has to travel with the number: days in the
+      // current stage and days since creation are different measures, and a spreadsheet that mixed them in
+      // one column would happily average them.
+      'Age measured on',
+      'Days used',
+      'Days allowed',
+      'Days over',
       'Owner',
       'Status',
     ])

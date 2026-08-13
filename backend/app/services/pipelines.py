@@ -13,7 +13,13 @@ from app.models import (
     StageDeliverable,
     StageKind,
 )
-from app.schemas.pipeline import StageCreate, StageUpdate
+from app.schemas.pipeline import (
+    DeliverableRead,
+    PipelineTemplateRead,
+    StageCreate,
+    StageRead,
+    StageUpdate,
+)
 
 
 class StageInUse(Exception):
@@ -54,6 +60,51 @@ def _ordered(template: PipelineTemplate) -> list[Stage]:
     return sorted(template.stages, key=lambda stage: stage.position)
 
 
+def template_read(template: PipelineTemplate) -> PipelineTemplateRead:
+    """
+    A template on the wire, with the champion requirement spread across its stages.
+
+    The gate is stored once, as a position, and expanded here into a per-stage answer because that is what
+    every consumer actually asks: "does this stage need a champion". Expanding on read rather than storing
+    per stage keeps one source of truth — nothing can drift into claiming two gates.
+
+    `champion_required` is true from the gate onward and `is_champion_gate` for the one stage where the rule
+    begins, so the UI can mark the boundary instead of painting an indistinguishable band down half the
+    board. Terminal stages are never required: a won deal needs nothing.
+    """
+    gate = template.champion_gate_position
+    return PipelineTemplateRead(
+        id=template.id,
+        name=template.name,
+        champion_gate_position=gate,
+        stages=[
+            StageRead(
+                id=stage.id,
+                name=stage.name,
+                short_name=stage.short_name,
+                probability=stage.probability,
+                color=stage.color,
+                kind=stage.kind,
+                position=stage.position,
+                wip_limit=stage.wip_limit,
+                expected_days=stage.expected_days,
+                champion_required=gate is not None
+                and stage.kind is StageKind.OPEN
+                and stage.position >= gate,
+                is_champion_gate=gate is not None and stage.position == gate,
+                entry_criteria=stage.entry_criteria,
+                exit_criteria=stage.exit_criteria,
+                key_activities=stage.key_activities,
+                deliverables=[
+                    DeliverableRead(id=d.id, text=d.text, position=d.position)
+                    for d in sorted(stage.deliverables, key=lambda d: d.position)
+                ],
+            )
+            for stage in _ordered(template)
+        ],
+    )
+
+
 def _renumber(stages: list[Stage]) -> None:
     """Rewrites positions to 1..n so ordering never develops gaps or ties."""
     for index, stage in enumerate(stages, start=1):
@@ -76,6 +127,10 @@ async def add_stage(db: AsyncSession, template: PipelineTemplate, payload: Stage
         color=payload.color,
         kind=payload.kind,
         wip_limit=payload.wip_limit,
+<<<<<<< Updated upstream
+=======
+        expected_days=payload.expected_days,
+>>>>>>> Stashed changes
         entry_criteria=payload.entry_criteria,
         exit_criteria=payload.exit_criteria,
         key_activities=payload.key_activities,
@@ -225,8 +280,18 @@ async def reassign_deals(
 
 
 async def duplicate_template(db: AsyncSession, source: PipelineTemplate, name: str) -> PipelineTemplate:
+<<<<<<< Updated upstream
     """Stages are copied with fresh ids so the two templates never share stage records."""
     copy = PipelineTemplate(name=name, tracks_partner=source.tracks_partner)
+=======
+    """
+    Stages are copied with fresh ids so the two templates never share stage records.
+
+    The gate comes across too. Duplicating is how somebody makes a variant of a process that works, and a
+    copy that silently dropped the requirement would be a different process wearing the same name.
+    """
+    copy = PipelineTemplate(name=name, champion_gate_position=source.champion_gate_position)
+>>>>>>> Stashed changes
     db.add(copy)
     await db.flush()
 
@@ -240,6 +305,10 @@ async def duplicate_template(db: AsyncSession, source: PipelineTemplate, name: s
             kind=stage.kind,
             position=stage.position,
             wip_limit=stage.wip_limit,
+<<<<<<< Updated upstream
+=======
+            expected_days=stage.expected_days,
+>>>>>>> Stashed changes
             entry_criteria=stage.entry_criteria,
             exit_criteria=stage.exit_criteria,
             key_activities=stage.key_activities,
@@ -264,24 +333,66 @@ DEFAULT_STAGES: tuple[tuple[str, int, str, StageKind], ...] = (
 )
 
 
+<<<<<<< Updated upstream
 async def create_template(db: AsyncSession, name: str, tracks_partner: bool) -> PipelineTemplate:
     """A new pipeline still needs somewhere for deals to land and to finish."""
     template = PipelineTemplate(name=name, tracks_partner=tracks_partner)
+=======
+async def create_template(
+    db: AsyncSession,
+    name: str,
+    stages: list[StageCreate] | None = None,
+    champion_gate_position: int | None = None,
+) -> PipelineTemplate:
+    """
+    A new pipeline, with the stages it will have and the gate it will run under.
+
+    Creation is the only place the gate can be decided — see `StageUpdate` for why. That is why this
+    function takes the whole shape rather than only a name: a pipeline that could not be gated at birth
+    could never be gated at all.
+
+    Omitted stages fall back to the defaults, which gate nothing. A pipeline still needs somewhere for deals
+    to land and somewhere to finish, so the defaults supply all three.
+
+    Positions come from the order given, not from any field in the payload. One source of truth for order,
+    and it is the one the caller can actually see — which is also what the gate position refers to.
+    """
+    template = PipelineTemplate(name=name, champion_gate_position=champion_gate_position)
+>>>>>>> Stashed changes
     db.add(template)
     await db.flush()
 
-    for position, (stage_name, probability, color, kind) in enumerate(DEFAULT_STAGES, start=1):
-        db.add(
-            Stage(
-                pipeline_template_id=template.id,
-                name=stage_name,
-                short_name=stage_name,
-                probability=probability,
-                color=color,
-                kind=kind,
-                position=position,
+    if stages:
+        for position, payload in enumerate(stages, start=1):
+            db.add(
+                Stage(
+                    pipeline_template_id=template.id,
+                    name=payload.name,
+                    short_name=payload.short_name or payload.name,
+                    probability=payload.probability,
+                    color=payload.color,
+                    kind=payload.kind,
+                    wip_limit=payload.wip_limit,
+                    expected_days=payload.expected_days,
+                    entry_criteria=payload.entry_criteria,
+                    exit_criteria=payload.exit_criteria,
+                    key_activities=payload.key_activities,
+                    position=position,
+                )
             )
-        )
+    else:
+        for position, (stage_name, probability, color, kind) in enumerate(DEFAULT_STAGES, start=1):
+            db.add(
+                Stage(
+                    pipeline_template_id=template.id,
+                    name=stage_name,
+                    short_name=stage_name,
+                    probability=probability,
+                    color=color,
+                    kind=kind,
+                    position=position,
+                )
+            )
 
     await db.flush()
     await db.refresh(template)
@@ -290,14 +401,47 @@ async def create_template(db: AsyncSession, name: str, tracks_partner: bool) -> 
 
 async def move_deal_to_stage(db: AsyncSession, deal: Deal, stage: Stage, actor_id: uuid.UUID) -> bool:
     """
+<<<<<<< Updated upstream
     v1 advancement is a plain manual move — no exit-criteria gating (spec 6.4), even
     though every stage carries its criteria.
+=======
+    Advancement is a plain manual move — no exit-criteria gating (spec 6.4), even though every stage
+    carries its criteria — with one exception: the champion gate.
+
+    That check lives here rather than in the endpoint so both routes to a stage change are covered:
+    `POST /deals/{id}/stage` from the board, and the `stage_id` inside `PATCH /deals/{id}`. A gate on
+    one of the two would be a gate on neither.
+
+    **The gate is one position on the pipeline, and it applies from there onward.** With the gate at stage
+    2, a deal enters stage 2 freely and cannot leave it without a champion; the same requirement holds for
+    3→4 and 4→5, so a champion unmapped at stage 4 stops the deal at stage 4. The test is whether the
+    *destination* is past the gate, which also handles a skipped move: a jump from 1 straight to 4 crosses
+    the gate and is refused like any other crossing.
+
+    **A backward move is not checked at all.** Regressing a deal into an earlier stage is a correction,
+    usually made *because* the deal is in trouble, and demanding a complete champion before allowing it
+    would mean the only way to record a slipping deal accurately is to first do the thing that is not
+    happening. It also produced a plain absurdity: a deal could be refused entry to a stage it had
+    already sat in for a month.
+
+    Raises `contact_service.ChampionRequired`, which the API turns into a 409 — the caller has
+    permission, the deal is simply not ready. Imported inside the function because
+    `services.contacts` imports the repositories, and importing it at module scope closes a cycle.
+>>>>>>> Stashed changes
     """
     if stage.pipeline_template_id != deal.pipeline_template_id:
         raise CrossPipelineMove
     if deal.stage_id == stage.id:
         return False
 
+<<<<<<< Updated upstream
+=======
+    from app.services import contacts as contact_service
+
+    if stage.position > deal.stage.position:
+        await contact_service.assert_champion_ready(db, deal, stage)
+
+>>>>>>> Stashed changes
     deal.stage_id = stage.id
     db.add(
         Activity(

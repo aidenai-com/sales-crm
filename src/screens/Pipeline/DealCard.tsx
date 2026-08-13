@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/core'
 import type { DealView } from '@/lib/rollup'
 import { compactMoney, relativeToNow } from '@/lib/format'
 import { HealthDot } from '@/components/ui/Badge'
+import { ChampionBadge, useChampionGap } from '@/components/ui/ChampionWarning'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
 import { MoveToStageMenu } from './MoveToStageMenu'
@@ -34,7 +35,12 @@ export function DealCard({
     disabled: !canMove,
   })
 
+<<<<<<< Updated upstream
   const isPartnerDeal = view.pipeline.tracksPartner
+=======
+  const championGap = useChampionGap(view.deal.id)
+
+>>>>>>> Stashed changes
 
   return (
     <div
@@ -123,7 +129,12 @@ export function DealCard({
           <span className="text-caption text-slate-gray">{relativeToNow(view.deal.expectedCloseDate)}</span>
         </div>
 
-        <p className="mt-8 truncate text-caption text-mist-gray">{view.ownerName}</p>
+        <div className="mt-8 flex items-center justify-between gap-8">
+          <p className="truncate text-caption text-mist-gray">{view.ownerName}</p>
+          {/* Below the money, not beside the health dot: the dot says whether the deal is in trouble,
+              and this says whether it is allowed to move. Two different questions. */}
+          {championGap && <ChampionBadge gap={championGap} />}
+        </div>
       </div>
     </div>
   )

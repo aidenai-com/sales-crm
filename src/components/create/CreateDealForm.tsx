@@ -48,8 +48,14 @@ export function CreateDealForm({
   const [leadId, setLeadId] = useState<string>(defaultLeadId ?? '')
   const [pipelineId, setPipelineId] = useState(defaultPipelineId ?? snapshot.pipelines[0]?.id ?? '')
   const [stageId, setStageId] = useState(defaultStageId ?? '')
+<<<<<<< Updated upstream
   const [partnerId, setPartnerId] = useState<string>('')
   const [value, setValue] = useState(0)
+=======
+  //: Held as a string, and empty to begin with. It used to be `0`, which put a zero in the field that a
+  //: rep had to delete before typing — and which submitted as a real, meaningless $0 deal if they did not.
+  const [value, setValue] = useState('')
+>>>>>>> Stashed changes
   const [closeDate, setCloseDate] = useState(defaultCloseDate)
   const [ownerId, setOwnerId] = useState(user?.id ?? snapshot.people[0]?.id ?? '')
   const [saving, setSaving] = useState(false)
@@ -68,7 +74,45 @@ export function CreateDealForm({
   const leadsForAccount = snapshot.leads.filter((l) => l.accountId === accountId)
 
   const trimmed = name.trim()
+<<<<<<< Updated upstream
   const canSave = trimmed.length > 0 && accountId !== '' && effectiveStageId !== '' && !saving
+=======
+  // Why the form cannot be submitted yet, in the order somebody fills the fields in.
+  //
+  // A single reason rather than a list: fixing the first one usually reveals whether there is a second,
+  // and a form that reports four problems at once reads as broken rather than incomplete.
+  //
+  // This is the *only* place the "a deal needs at least one contact" rule is enforced — the API accepts
+  // a payload without contacts so that it stays compatible and so that a missing contact cannot mask an
+  // ownership error. That makes the guard below load-bearing, not a convenience.
+  // `Number('')` is 0, which is exactly the answer wanted here: an empty field and a zero are both "no
+  // value given", and both are refused with the same sentence.
+  const numericValue = Number(value)
+
+  const blockedBecause =
+    trimmed.length === 0
+      ? 'Give the opportunity a name.'
+      : accountId === ''
+        ? 'Choose the customer.'
+        : effectiveStageId === ''
+          ? 'Choose a stage.'
+          : numericValue <= 0
+            ? 'Give the deal a value.'
+            : contacts.length === 0
+              ? 'Add at least one contact, so there is a route to the customer.'
+              : null
+
+  const canSave = blockedBecause === null && !saving
+
+  function changeAccount(nextId: string) {
+    setAccountId(nextId)
+    setLeadId('')
+    // Contacts are *not* cleared. They used to be, because a deal's people had to work at its customer
+    // or its partner and changing the customer could invalidate them. That rule is gone with the partner
+    // column — anybody from any company can be on a deal — so clearing them would now just discard work
+    // somebody had already done.
+  }
+>>>>>>> Stashed changes
 
   function changePipeline(nextId: string) {
     setPipelineId(nextId)
@@ -89,7 +133,7 @@ export function CreateDealForm({
         partnerId: pipeline?.tracksPartner ? partnerId || null : null,
         pipelineTemplateId: pipelineId,
         stageId: effectiveStageId,
-        value,
+        value: numericValue,
         expectedCloseDate: closeDate,
         ownerId,
       })
@@ -211,7 +255,8 @@ export function CreateDealForm({
             step={10_000}
             value={value}
             disabled={saving}
-            onChange={(e) => setValue(Number(e.target.value) || 0)}
+            placeholder="250000"
+            onChange={(e) => setValue(e.target.value)}
           />
         </Field>
 

@@ -27,6 +27,13 @@ export type RouteName =
   | 'deals'
   | 'deal'
   | 'pipelines'
+<<<<<<< Updated upstream
+=======
+  | 'aiUsage'
+  | 'team'
+  | 'profile'
+  | 'integrations'
+>>>>>>> Stashed changes
   | 'not-found'
 
 export interface Match {
@@ -52,6 +59,13 @@ const ROUTES: Array<{ name: RouteName; pattern: string }> = [
   { name: 'deals', pattern: '/deals' },
   { name: 'deal', pattern: '/deals/:dealId' },
   { name: 'pipelines', pattern: '/settings/pipelines' },
+<<<<<<< Updated upstream
+=======
+  { name: 'aiUsage', pattern: '/settings/ai-usage' },
+  { name: 'team', pattern: '/settings/team' },
+  { name: 'profile', pattern: '/settings/profile' },
+  { name: 'integrations', pattern: '/settings/integrations' },
+>>>>>>> Stashed changes
 ]
 
 /**
@@ -175,4 +189,11 @@ export const routes = {
   deals: '/deals',
   deal: (dealId: string) => `/deals/${encodeURIComponent(dealId)}`,
   pipelines: '/settings/pipelines',
+<<<<<<< Updated upstream
+=======
+  aiUsage: '/settings/ai-usage',
+  team: '/settings/team',
+  profile: '/settings/profile',
+  integrations: '/settings/integrations',
+>>>>>>> Stashed changes
 } as const

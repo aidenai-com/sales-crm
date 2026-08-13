@@ -31,11 +31,33 @@ class PipelineTemplate(UUIDMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "pipeline_templates"
+    __table_args__ = (
+        CheckConstraint(
+            "champion_gate_position IS NULL OR champion_gate_position >= 1",
+            name="champion_gate_position_positive",
+        ),
+    )
 
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
 
+<<<<<<< Updated upstream
     #: Whether deals on this pipeline carry a Partner alongside the Customer (R8).
     tracks_partner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+=======
+    #: The stage position from which a champion is required, or null for a pipeline that never asks.
+    #:
+    #: **One position, not a flag per stage, and this is the whole design.** The rule is "from this stage
+    #: onward": with the gate at 2, a deal can enter stage 2 freely but cannot leave it — nor stage 3, nor
+    #: stage 4 — without a champion who has email, phone and LinkedIn. A boolean on each stage could
+    #: represent two gates, or a gap where the requirement lapses and returns, neither of which is a thing
+    #: the process can mean. Storing the position makes those states unrepresentable rather than merely
+    #: discouraged.
+    #:
+    #: Set once, when the pipeline is created, and never afterwards. Moving a gate under deals that are
+    #: already past it would retroactively make compliant deals non-compliant, and no amount of warning
+    #: copy makes that a reasonable thing for one admin to do to everybody else's book.
+    champion_gate_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+>>>>>>> Stashed changes
 
     stages: Mapped[list["Stage"]] = relationship(
         back_populates="pipeline",
@@ -98,6 +120,20 @@ class Stage(UUIDMixin, TimestampMixin, Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     wip_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+<<<<<<< Updated upstream
+=======
+    #: How long a deal is expected to spend in this stage, in days. Null on terminal stages, where the
+    #: question has no meaning — nothing is expected to leave Closed Won.
+    #:
+    #: Set when the pipeline is configured, alongside the champion gate, because both are statements about
+    #: how the process is supposed to run rather than facts about any one deal.
+    expected_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # The champion gate is deliberately NOT a per-stage flag. It is one position on the pipeline — see
+    # `PipelineTemplate.champion_gate_position` — because the rule is "from this stage onward", which a
+    # boolean per stage cannot express without allowing two gates and disagreeing with itself.
+
+>>>>>>> Stashed changes
     entry_criteria: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     exit_criteria: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     key_activities: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     s3_presign_expiry_seconds: int = 900
     max_upload_bytes: int = 26_214_400  # 25 MiB
 
+    # Lemlist. The base URL lemlist should call back on — it must be reachable from the public
+    # internet, so localhost is useless here and a tunnel is what development needs. Blank means
+    # webhook registration is refused with an explanation rather than registering a hook that can
+    # never fire; imports and the nightly reconcile work regardless.
+    lemlist_webhook_base_url: str = ""
+    lemlist_nightly_sync_enabled: bool = False
+
     # Reminders. Delivery is chosen by whether `smtp_host` is set: blank falls back to a
     # notifier that logs the message instead of sending it, so a fresh checkout works with
     # no credentials and real ones in .env switch sending on without a code change.

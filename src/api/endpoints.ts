@@ -1,14 +1,22 @@
 import type {
   Account,
+  Ageing,
   Activity,
   ActivityKind,
   ActivitySubjectType,
+  AnalyticsPeriod,
   AnalyticsSummary,
   Attachment,
+  ChampionGap,
   CompletionResult,
   Deal,
   DealChecklist,
   Id,
+  LemlistCampaign,
+  LemlistEngagement,
+  LemlistProspect,
+  LemlistStatus,
+  LemlistSyncResult,
   Lead,
   Person,
   PipelineTemplate,
@@ -52,6 +60,12 @@ interface StageDto {
   kind: StageKind
   position: number
   wipLimit: number | null
+<<<<<<< Updated upstream
+=======
+  expectedDays: number | null
+  championRequired: boolean
+  isChampionGate: boolean
+>>>>>>> Stashed changes
   entryCriteria: string[] | null
   exitCriteria: string[] | null
   keyActivities: string[] | null
@@ -67,7 +81,11 @@ interface DeliverableDto {
 interface PipelineDto {
   id: string
   name: string
+<<<<<<< Updated upstream
   tracksPartner: boolean
+=======
+  championGatePosition: number | null
+>>>>>>> Stashed changes
   stages: StageDto[]
 }
 
@@ -100,6 +118,7 @@ interface DealDto {
   currency: string
   expectedCloseDate: string
   ownerId: string
+  ageing: Ageing | null
 }
 
 interface ActivityDto {
@@ -162,6 +181,12 @@ function toStage(dto: StageDto): Stage {
     color: dto.color,
     kind: dto.kind,
     position: dto.position,
+<<<<<<< Updated upstream
+=======
+    expectedDays: dto.expectedDays,
+    championRequired: dto.championRequired,
+    isChampionGate: dto.isChampionGate,
+>>>>>>> Stashed changes
     wipLimit: dto.wipLimit,
     entryCriteria: dto.entryCriteria,
     exitCriteria: dto.exitCriteria,
@@ -176,7 +201,11 @@ function toPipeline(dto: PipelineDto): PipelineTemplate {
   return {
     id: dto.id,
     name: dto.name,
+<<<<<<< Updated upstream
     tracksPartner: dto.tracksPartner,
+=======
+    championGatePosition: dto.championGatePosition,
+>>>>>>> Stashed changes
     // Defensive: the API orders these, but the board's correctness should not depend on it.
     stages: dto.stages.map(toStage).sort((a, b) => a.position - b.position),
   }
@@ -196,6 +225,7 @@ function toDeal(dto: DealDto): Deal {
     currency: dto.currency,
     expectedCloseDate: dto.expectedCloseDate,
     ownerId: dto.ownerId,
+    ageing: dto.ageing ?? null,
   }
 }
 
@@ -223,19 +253,57 @@ export const readApi = {
   pipelines: () => api.get<PipelineDto[]>('/pipelines').then((rows) => rows.map(toPipeline)),
   activities: (limit = 500) =>
     api.get<ActivityDto[]>(`/activities?limit=${limit}`) as Promise<Activity[]>,
+<<<<<<< Updated upstream
+=======
+  contacts: () => api.get<Contact[]>('/contacts'),
+  contactRoles: () => api.get<ContactRole[]>('/contacts/roles'),
+  championGaps: () => api.get<ChampionGap[]>('/deals/champion-gaps'),
+>>>>>>> Stashed changes
 }
 
 /** One call per collection, in parallel. Everything the UI needs to render any screen. */
 export async function loadSnapshot(): Promise<Snapshot> {
+<<<<<<< Updated upstream
   const [people, accounts, leads, deals, pipelines, activities] = await Promise.all([
+=======
+  const [
+    people,
+    accounts,
+    leads,
+    deals,
+    pipelines,
+    activities,
+    contacts,
+    contactRoles,
+    championGaps,
+  ] = await Promise.all([
+>>>>>>> Stashed changes
     readApi.users(),
     readApi.accounts(),
     readApi.leads(),
     readApi.deals(),
     readApi.pipelines(),
     readApi.activities(),
+<<<<<<< Updated upstream
   ])
   return { people, accounts, leads, deals, pipelines, activities }
+=======
+    readApi.contacts(),
+    readApi.contactRoles(),
+    readApi.championGaps(),
+  ])
+  return {
+    people,
+    accounts,
+    leads,
+    deals,
+    pipelines,
+    activities,
+    contacts,
+    contactRoles,
+    championGaps,
+  }
+>>>>>>> Stashed changes
 }
 
 // --- Writes ------------------------------------------------------------------
@@ -285,6 +353,79 @@ export interface NewUser {
   password: string
 }
 
+<<<<<<< Updated upstream
+=======
+/**
+ * A team member as the Team settings screen needs them.
+ *
+ * Wider than `Person`, which is what the rest of the app uses: owner dropdowns need a name and
+ * initials and nothing else, so the snapshot carries nothing else. Email, role and active state are
+ * administration, and they live here rather than being added to `Person` so that every screen in the
+ * app does not start carrying a colleague's email address around to render a two-letter avatar.
+ */
+export interface TeamMember {
+  id: Id
+  name: string
+  initials: string
+  email: string
+  jobTitle: string
+  role: 'admin' | 'rep'
+  isActive: boolean
+}
+
+export interface UserPatch {
+  email?: string
+  fullName?: string
+  initials?: string
+  jobTitle?: string
+  role?: 'admin' | 'rep'
+  isActive?: boolean
+  /** A reset. Set by an administrator without the current password — see the API's own note. */
+  password?: string
+  /**
+   * Who inherits this person's accounts and open deals. Sent with `isActive: false` when an
+   * administrator hands the book over; omitted when they deliberately leave it where it is.
+   */
+  reassignTo?: Id
+}
+
+/** What somebody is holding, so deactivating them is a decision rather than a surprise. */
+export interface OwnershipSummary {
+  userId: Id
+  accounts: number
+  openDeals: number
+  openDealValue: number
+}
+
+function toTeamMember(dto: UserDto): TeamMember {
+  return {
+    id: dto.id,
+    name: dto.fullName,
+    initials: dto.initials,
+    email: dto.email,
+    jobTitle: dto.jobTitle,
+    role: dto.role,
+    isActive: dto.isActive,
+  }
+}
+
+/** Administration of people. Every call here is 403 for a rep except the list. */
+export const teamApi = {
+  list: () => api.get<UserDto[]>('/auth/users').then((rows) => rows.map(toTeamMember)),
+  create: (input: NewUser) => api.post<UserDto>('/auth/users', input).then(toTeamMember),
+  update: (userId: Id, patch: UserPatch) =>
+    api.patch<UserDto>(`/auth/users/${userId}`, patch).then(toTeamMember),
+
+  ownership: (userId: Id) =>
+    api
+      .get<{ userId: Id; accounts: number; openDeals: number; openDealValue: string }>(
+        `/auth/users/${userId}/ownership`,
+      )
+      // Money crosses as a string, as it does everywhere else in this API.
+      .then((dto) => ({ ...dto, openDealValue: Number(dto.openDealValue) }) as OwnershipSummary),
+}
+
+>>>>>>> Stashed changes
 export const createApi = {
   /** Admin only; the API returns 403 for a rep. */
   user: (input: NewUser) => api.post<UserDto>('/auth/users', input).then(toAuthUser),
@@ -327,6 +468,21 @@ export const writeApi = {
 
 // --- Pipeline administration (admin only) ------------------------------------
 
+/**
+ * A stage as it is created.
+ *
+ * No champion field. The gate is one position on the *pipeline*, sent once as
+ * `championGatePosition` when the pipeline is created — a per-stage flag could describe two gates.
+ */
+export interface NewStage {
+  name: string
+  shortName?: string
+  probability?: number
+  color?: string
+  kind?: StageKind
+  expectedDays?: number | null
+}
+
 export interface StagePatchBody {
   name?: string
   shortName?: string
@@ -334,6 +490,13 @@ export interface StagePatchBody {
   color?: string
   kind?: StageKind
   wipLimit?: number | null
+<<<<<<< Updated upstream
+=======
+  // `expectedDays` is editable and the champion gate is not, and the difference is the point: one is an
+  // expectation that nothing is refused for, the other is a rule deals have already been judged against.
+  // The API refuses a gate outright, so having it here would only let a caller build a request that fails.
+  expectedDays?: number | null
+>>>>>>> Stashed changes
   /**
    * The complete desired list when sent; omitted leaves the checklist alone.
    *
@@ -346,9 +509,37 @@ export interface StagePatchBody {
 }
 
 export const pipelineApi = {
+<<<<<<< Updated upstream
   create: (name: string, tracksPartner: boolean, copyStagesFrom?: Id) =>
     api
       .post<PipelineDto>('/pipelines', { name, tracksPartner, copyStagesFrom: copyStagesFrom ?? null })
+=======
+  /**
+   * Creates a pipeline, declaring its stages and its champion gate.
+   *
+   * All of it is here because the gate can only be set at creation — the API refuses it on an update. A
+   * create that could only take a name would leave a new pipeline permanently ungateable.
+   *
+   * `championGatePosition` is 1-based against the stage list as sent, and must name an open stage that is
+   * not the last one: the rule applies to moving *past* the gate, so a gate on the final open stage could
+   * never fire. The API validates both and answers 422.
+   *
+   * `stages` and `copyStagesFrom` are alternatives; sending both is a 400 rather than a silent choice
+   * between two complete descriptions. A copy carries the source's gate, so sending one alongside
+   * `copyStagesFrom` is refused too.
+   */
+  create: (
+    name: string,
+    options: { copyStagesFrom?: Id; stages?: NewStage[]; championGatePosition?: number | null } = {},
+  ) =>
+    api
+      .post<PipelineDto>('/pipelines', {
+        name,
+        copyStagesFrom: options.copyStagesFrom ?? null,
+        stages: options.stages ?? null,
+        championGatePosition: options.championGatePosition ?? null,
+      })
+>>>>>>> Stashed changes
       .then(toPipeline),
 
   update: (pipelineId: Id, patch: { name?: string; tracksPartner?: boolean }) =>
@@ -357,8 +548,14 @@ export const pipelineApi = {
   duplicate: (pipelineId: Id, name: string) =>
     api.post<PipelineDto>(`/pipelines/${pipelineId}/duplicate`, { name }).then(toPipeline),
 
-  addStage: (pipelineId: Id, name: string) =>
-    api.post<PipelineDto>(`/pipelines/${pipelineId}/stages`, { name }).then(toPipeline),
+  /**
+   * Adds a stage to an existing pipeline.
+   *
+   * The gate is not settable here, and cannot be: it is a position, and a stage added in the middle would
+   * shift what that position means for every deal already past it.
+   */
+  addStage: (pipelineId: Id, stage: NewStage) =>
+    api.post<PipelineDto>(`/pipelines/${pipelineId}/stages`, stage).then(toPipeline),
 
   updateStage: (pipelineId: Id, stageId: Id, patch: StagePatchBody) =>
     api.patch<PipelineDto>(`/pipelines/${pipelineId}/stages/${stageId}`, patch).then(toPipeline),
@@ -487,9 +684,20 @@ export const reminderApi = {
 export interface AnalyticsQuery {
   pipelineId?: Id | null
   ownerId?: Id | null
+<<<<<<< Updated upstream
   partnerId?: Id | null
   closeFrom?: string | null
   closeTo?: string | null
+=======
+  /**
+   * Which window the whole screen describes, by deal *created* date.
+   *
+   * This replaced an explicit close-date range. A range is two inputs that can be set to something
+   * nonsensical and has no answer to "compared with what"; a named calendar period has a defined
+   * predecessor, which is what the creation panel needs to be worth reading.
+   */
+  period?: AnalyticsPeriod | null
+>>>>>>> Stashed changes
 }
 
 /**
@@ -502,9 +710,13 @@ export interface AnalyticsQuery {
 const ANALYTICS_PARAMS: Record<keyof AnalyticsQuery, string> = {
   pipelineId: 'pipeline_id',
   ownerId: 'owner_id',
+<<<<<<< Updated upstream
   partnerId: 'partner_id',
   closeFrom: 'close_from',
   closeTo: 'close_to',
+=======
+  period: 'period',
+>>>>>>> Stashed changes
 }
 
 export const analyticsApi = {
@@ -517,3 +729,128 @@ export const analyticsApi = {
     return api.get<AnalyticsSummary>(`/analytics/summary${suffix ? `?${suffix}` : ''}`)
   },
 }
+<<<<<<< Updated upstream
+=======
+
+// --- Contacts ----------------------------------------------------------------
+
+export interface ContactPatchBody {
+  fullName?: string
+  email?: string
+  phone?: string
+  linkedinUrl?: string
+  designation?: string
+  contactType?: ContactType
+  // No `accountId`. Moving a contact between companies is not an edit — their designation and every
+  // deal they are on belong to the old account.
+}
+
+export const contactApi = {
+  /**
+   * Accounts that might already be the company someone is typing.
+   *
+   * Called on a debounce while the name field changes, so it is deliberately the cheapest read in the
+   * app. `blocksCreation` marks a match the API will refuse outright, as opposed to one worth a look.
+   */
+  similarAccounts: (name: string, signal?: AbortSignal) =>
+    api.get<SimilarAccount[]>(`/accounts/similar?name=${encodeURIComponent(name)}`, signal),
+
+  update: (contactId: Id, patch: ContactPatchBody) =>
+    api.patch<Contact>(`/contacts/${contactId}`, patch),
+
+  /** Admin only. Strips this person from every deal they were on, so it is not a rep's call. */
+  remove: (contactId: Id) => api.delete<{ detail: string }>(`/contacts/${contactId}`),
+
+  /**
+   * The roles a deal tracks and the people on it.
+   *
+   * Every write below returns the whole picture rather than the row that changed. The panel renders
+   * roles and contacts together, and the states worth seeing are the mismatches — an unfilled role, an
+   * unmapped person — so a fragment would leave the client re-fetching or guessing.
+   */
+  forDeal: (dealId: Id) => api.get<DealPeople>(`/deals/${dealId}/people`),
+
+  addToDeal: (dealId: Id, assignment: DealContactAssignment) =>
+    api.post<DealPeople>(`/deals/${dealId}/contacts`, assignment),
+
+  /** Maps, remaps, or unmaps somebody. A null role unmaps without detaching them from the deal. */
+  remapOnDeal: (dealId: Id, linkId: Id, roleId: Id | null) =>
+    api.patch<DealPeople>(`/deals/${dealId}/contacts/${linkId}`, { roleId }),
+
+  /** Detaches one person. The contact itself is untouched and the role stays tracked. */
+  removeFromDeal: (dealId: Id, linkId: Id) =>
+    api.delete<DealPeople>(`/deals/${dealId}/contacts/${linkId}`),
+
+  /** Starts tracking a role on this deal, with or without anybody in it. */
+  addRoleToDeal: (dealId: Id, roleId: Id) =>
+    api.post<DealPeople>(`/deals/${dealId}/roles`, { roleId }),
+
+  /** Stops tracking a role. Anybody who held it becomes unmapped rather than detached. */
+  removeRoleFromDeal: (dealId: Id, linkId: Id) =>
+    api.delete<DealPeople>(`/deals/${dealId}/roles/${linkId}`),
+}
+
+export const contactRoleApi = {
+  /** Admin only: which roles exist is a company-wide configuration decision, like a pipeline's stages. */
+  create: (name: string) => api.post<ContactRole>('/contacts/roles', { name }),
+  update: (roleId: Id, patch: { name?: string; position?: number }) =>
+    api.patch<ContactRole>(`/contacts/roles/${roleId}`, patch),
+  /** Refused with 409 if the role is built in, or still assigned on any deal. */
+  remove: (roleId: Id) => api.delete<{ detail: string }>(`/contacts/roles/${roleId}`),
+}
+
+
+// --- Lemlist ------------------------------------------------------------------
+
+/**
+ * The lemlist integration.
+ *
+ * Every read here hits our own database, not lemlist. That is the whole design: the Contacts page must not
+ * inherit lemlist's latency, its 20-requests-per-2-seconds workspace budget, or its downtime. Only
+ * `connect` and `sync` talk to lemlist, and both are explicit user actions.
+ */
+export const lemlistApi = {
+  status: () => api.get<LemlistStatus>('/integrations/lemlist/status'),
+
+  connect: (apiKey: string) =>
+    api.post<LemlistStatus>('/integrations/lemlist/connect', { apiKey }),
+
+  disconnect: () => api.delete<{ detail: string }>('/integrations/lemlist/connect'),
+
+  registerWebhook: () => api.post<{ detail: string }>('/integrations/lemlist/webhook/register'),
+
+  /** The mirrored campaign list. Free — reads our tables, never lemlist. */
+  campaigns: () => api.get<LemlistCampaign[]>('/integrations/lemlist/campaigns'),
+
+  /** Asks lemlist whether the campaign list has changed. One or two requests, so it stays quick. */
+  refreshCampaigns: () => api.post<LemlistCampaign[]>('/integrations/lemlist/campaigns/refresh'),
+
+  /**
+   * Imports one campaign's leads and activity, and waits for it.
+   *
+   * Slow by nature: paced under lemlist's rate limit, a large campaign takes a while. One campaign at a
+   * time is what keeps it inside a request at all — importing the whole workspace at once did not fit.
+   */
+  importCampaign: (campaignId: Id, full = true) =>
+    api.post<LemlistSyncResult>(
+      `/integrations/lemlist/campaigns/${campaignId}/import?full=${full}`,
+    ),
+
+  prospects: (params: { campaignId?: Id; state?: string; search?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (params.campaignId) query.set('campaign_id', params.campaignId)
+    if (params.state) query.set('state', params.state)
+    if (params.search) query.set('search', params.search)
+    const suffix = query.toString() ? `?${query}` : ''
+    return api.get<LemlistProspect[]>(`/integrations/lemlist/contacts${suffix}`)
+  },
+
+  timeline: (prospectId: Id) =>
+    api.get<LemlistEngagement[]>(`/integrations/lemlist/contacts/${prospectId}/timeline`),
+
+  promote: (prospectId: Id, accountId: Id) =>
+    api.post<{ detail: string }>(`/integrations/lemlist/contacts/${prospectId}/promote`, {
+      accountId,
+    }),
+}
+>>>>>>> Stashed changes

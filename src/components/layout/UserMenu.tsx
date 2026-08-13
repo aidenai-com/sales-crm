@@ -38,6 +38,55 @@ export function UserMenu() {
           <MenuItem
             onSelect={() => {
               close()
+<<<<<<< Updated upstream
+=======
+              navigate(routes.profile)
+            }}
+          >
+            Your profile
+          </MenuItem>
+
+          {/* Not admin-gated: a lemlist key belongs to the person who generated it, so every rep
+              connects their own. */}
+          <MenuItem
+            onSelect={() => {
+              close()
+              navigate(routes.integrations)
+            }}
+          >
+            Integrations
+          </MenuItem>
+
+          {/* Here rather than as icons in the nav bar: team administration and assistant spend are
+              things an admin checks occasionally, and the header is for what people reach for daily. */}
+          {isAdmin && (
+            <MenuItem
+              onSelect={() => {
+                close()
+                navigate(routes.team)
+              }}
+            >
+              Team
+            </MenuItem>
+          )}
+
+          {isAdmin && (
+            <MenuItem
+              onSelect={() => {
+                close()
+                navigate(routes.aiUsage)
+              }}
+            >
+              Assistant usage
+            </MenuItem>
+          )}
+
+          <MenuDivider />
+
+          <MenuItem
+            onSelect={() => {
+              close()
+>>>>>>> Stashed changes
               signOut()
             }}
           >

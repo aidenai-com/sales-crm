@@ -10,9 +10,10 @@ import { cn } from '@/lib/cn'
  * solve problems this screen does not have, and would bring its own colours — which are
  * the one thing here that is not a free choice (see the viz tokens in `theme.css`).
  *
- * Bars are divs rather than SVG. They reflow with the container for free, inherit the
- * theme tokens without a paint pass, and can be read by a screen reader as the list they
- * actually are.
+ * Bars are divs wherever a bar is all that is needed: they reflow with the container for free, inherit the
+ * theme tokens without a paint pass, and read to a screen reader as the list they actually are. SVG appears
+ * only where geometry genuinely requires it — a cumulative line and an area need real coordinates, and a
+ * ghosted outline needs a stroke. The rule is that the form decides, not the file.
  */
 
 /** The two series slots, by role. Never index past these — a third series is not validated. */
@@ -72,7 +73,7 @@ export function StatTile({
   emphasis?: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-hairline bg-cloud px-24 py-16">
+    <div className="rounded-2xl border border-hairline bg-cloud px-16 py-16 sm:px-24">
       <p className="text-caption font-semibold tracking-wide text-slate-gray uppercase">{label}</p>
       <p
         className={cn(
@@ -106,6 +107,16 @@ export function ChartPanel({
   title: string
   subtitle?: string
   series?: Series[]
+<<<<<<< Updated upstream
+=======
+  /**
+   * A key that is not a list of series slots — a scale, a note about what the bars exclude.
+   *
+   * Most panels now pass neither this nor `series`: with weighted value gone each chart carries one
+   * measure, and a legend box for a single colour is furniture. Takes precedence over `series`.
+   */
+  legend?: ReactNode
+>>>>>>> Stashed changes
   table: ReactNode
   action?: ReactNode
   children: ReactNode
@@ -113,7 +124,9 @@ export function ChartPanel({
   const [showTable, setShowTable] = useState(false)
 
   return (
-    <section className="rounded-3xl border border-hairline bg-paper p-24 shadow-sm">
+    // 16px of padding on a phone and 24px above it. A 24px inset each side of a 360px screen leaves 312px
+    // for a chart, and the axis labels start colliding before the bars do.
+    <section className="rounded-3xl border border-hairline bg-paper p-16 shadow-sm sm:p-24">
       <div className="flex flex-wrap items-start justify-between gap-16">
         <div className="min-w-0">
           <h2 className="text-body-lg font-semibold text-ink-navy">{title}</h2>

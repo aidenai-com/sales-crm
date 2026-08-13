@@ -60,6 +60,7 @@ DIRECT_STAGES = (
         "probability": 5,
         "color": RAMP[0],
         "kind": StageKind.OPEN,
+        "expected_days": 21,
         "entry_criteria": [
             "Fits a personalized ICP vertical",
             "Identifiable pain and trigger signal present",
@@ -94,6 +95,7 @@ DIRECT_STAGES = (
         "probability": 15,
         "color": RAMP[1],
         "kind": StageKind.OPEN,
+        "expected_days": 30,
         "entry_criteria": [
             "First meeting secured with Director+ in tech / digital transformation",
             "Stage-1 hypothesis validated by internal contact or partner intro",
@@ -130,6 +132,7 @@ DIRECT_STAGES = (
         "probability": 30,
         "color": RAMP[2],
         "kind": StageKind.OPEN,
+        "expected_days": 45,
         "entry_criteria": [
             "Stage-2 exit met: funded pain, exec sponsor named, budget pathway",
             "Champion identified and tested",
@@ -167,6 +170,7 @@ DIRECT_STAGES = (
         "probability": 55,
         "color": RAMP[3],
         "kind": StageKind.OPEN,
+        "expected_days": 45,
         "entry_criteria": [
             "TVE Plan approved and signed by both teams",
             "Delivery team assigned, briefed, available",
@@ -203,6 +207,7 @@ DIRECT_STAGES = (
         "probability": 75,
         "color": RAMP[4],
         "kind": StageKind.OPEN,
+        "expected_days": 30,
         "entry_criteria": [
             "Stage-4 exit met: POC success, ROI accepted, preferred status",
             "Full decision process mapped",
@@ -283,21 +288,21 @@ DIRECT_STAGES = (
 # R7: the partner pipeline includes an onboarding stage. Post-onboarding, the partner
 # enters the GTM motion represented by the Co-Sell stage onward.
 PARTNER_STAGES = (
-    {"name": "Identify", "short_name": "Identify", "probability": 5, "color": RAMP[0], "kind": StageKind.OPEN},
-    {"name": "Onboarding", "short_name": "Onboarding", "probability": 15, "color": RAMP[1], "kind": StageKind.OPEN},
-    {"name": "Enabled", "short_name": "Enabled", "probability": 30, "color": RAMP[2], "kind": StageKind.OPEN},
-    {"name": "Co-Sell Pipeline", "short_name": "Co-Sell", "probability": 50, "color": RAMP[3], "kind": StageKind.OPEN},
-    {"name": "Joint Proposal", "short_name": "Joint Proposal", "probability": 75, "color": RAMP[4], "kind": StageKind.OPEN},
+    {"name": "Identify", "short_name": "Identify", "probability": 5, "color": RAMP[0], "kind": StageKind.OPEN, "expected_days": 14},
+    {"name": "Onboarding", "short_name": "Onboarding", "probability": 15, "color": RAMP[1], "kind": StageKind.OPEN, "expected_days": 30},
+    {"name": "Enabled", "short_name": "Enabled", "probability": 30, "color": RAMP[2], "kind": StageKind.OPEN, "expected_days": 45},
+    {"name": "Co-Sell Pipeline", "short_name": "Co-Sell", "probability": 50, "color": RAMP[3], "kind": StageKind.OPEN, "expected_days": 30},
+    {"name": "Joint Proposal", "short_name": "Joint Proposal", "probability": 75, "color": RAMP[4], "kind": StageKind.OPEN, "expected_days": 21},
     {"name": "Closed Won", "short_name": "Closed Won", "probability": 100, "color": RAMP[5], "kind": StageKind.WON},
     {"name": "Closed Lost", "short_name": "Closed Lost", "probability": 0, "color": LOST_COLOR, "kind": StageKind.LOST},
 )
 
-# (name, tracks_partner, stages)
+# (name, stages)
 # "AidenAI Direct" is named for what it is — the methodology pipeline from the deck — so
 # that adding a second direct-sales pipeline later does not need an awkward name.
 PIPELINES = (
-    ("AidenAI Direct", False, DIRECT_STAGES),
-    ("Partner Co-Sell", True, PARTNER_STAGES),
+    ("AidenAI Direct", DIRECT_STAGES),
+    ("Partner Co-Sell", PARTNER_STAGES),
 )
 
 # (key, name, account key, lead key, pipeline name, stage name, value,
@@ -349,4 +354,85 @@ ACTIVITIES = (
     ("deal", "d11", "note", "ICP score 74. Outreach hypothesis written against the claims cycle-time initiative.", "priya.raghavan@aidenai.com", 24),
     ("deal", "d6", "note", "Signature slipped past the target date. Chasing legal on the DPA redlines.", "priya.raghavan@aidenai.com", 29),
     ("deal", "d17", "meeting", "Virtusa architects certified on AiDAP 2.0. Ready for co-sell motion.", "dana.okonkwo@aidenai.com", 33),
+)
+
+
+# --- Contacts ----------------------------------------------------------------
+#
+# (key, account key, full name, designation, email, phone, linkedin, side)
+#
+# Deliberately uneven. Some people are missing a phone or a LinkedIn URL, because the champion gate
+# refuses a stage move until a champion has all three and the demo has to be able to *show* that — a
+# seed where everybody is complete would make the gate look like dead code.
+#
+# The four systems integrators carry partner-side people. Those attached to a co-sell deal are what
+# "there is a partner on this deal" now means, since no column says so.
+CONTACTS = (
+    # key            account      name                 designation                     email                             phone              linkedin                              side
+    ("c-jpmc-1",  "jpmc",      "Anita Desai",       "MD, Corporate Technology",     "anita.desai@jpmc.example",       "+1 212 555 0142", "linkedin.com/in/anitadesai",       "customer"),
+    ("c-jpmc-2",  "jpmc",      "Ravi Menon",        "Head of Platform Engineering",  "ravi.menon@jpmc.example",        "+1 212 555 0177", "linkedin.com/in/ravimenon",        "customer"),
+    # No LinkedIn: enough to be a contact, not enough to be a champion.
+    ("c-jpmc-3",  "jpmc",      "Sarah Whitfield",   "CIO, Consumer Bank",            "sarah.whitfield@jpmc.example",   "+1 212 555 0198", "",                                 "customer"),
+    ("c-bofa-1",  "bofa",      "Daniel Okafor",     "SVP, Wealth Technology",        "daniel.okafor@bofa.example",     "+1 704 555 0113", "linkedin.com/in/danielokafor",     "customer"),
+    # No phone.
+    ("c-bofa-2",  "bofa",      "Grace Lim",         "Director of Compliance Tech",   "grace.lim@bofa.example",         "",                "linkedin.com/in/gracelim",         "customer"),
+    ("c-citi-1",  "citi",      "Marco Bellini",     "Global Head of AI",             "marco.bellini@citi.example",     "+1 212 555 0231", "linkedin.com/in/marcobellini",     "customer"),
+    ("c-citi-2",  "citi",      "Yuki Tanaka",       "VP, Markets Technology",        "yuki.tanaka@citi.example",       "+1 212 555 0244", "linkedin.com/in/yukitanaka",       "customer"),
+    ("c-wells-1", "wells",     "Brandon Cole",      "Head of Digital Channels",      "brandon.cole@wells.example",     "+1 415 555 0166", "linkedin.com/in/brandoncole",      "customer"),
+    ("c-hsbc-1",  "hsbc",      "Priya Nair",        "Regional CTO, APAC",            "priya.nair@hsbc.example",        "+65 6555 0121",   "linkedin.com/in/priyanair",        "customer"),
+    ("c-pru-1",   "pru",       "Helen Moss",        "Chief Actuary",                 "helen.moss@pru.example",         "+1 973 555 0155", "linkedin.com/in/helenmoss",        "customer"),
+    ("c-aetna-1", "aetna",     "Victor Reyes",      "VP, Claims Automation",         "victor.reyes@aetna.example",     "+1 860 555 0188", "linkedin.com/in/victorreyes",      "customer"),
+    # Partner-side.
+    ("c-acc-1",   "accenture", "Fiona Gallagher",   "Managing Director, Banking",    "fiona.gallagher@accenture.example", "+44 20 7555 0101", "linkedin.com/in/fionagallagher", "partner"),
+    ("c-acc-2",   "accenture", "Samuel Adeyemi",    "Delivery Lead",                 "samuel.adeyemi@accenture.example",  "+44 20 7555 0119", "linkedin.com/in/samueladeyemi",  "partner"),
+    ("c-del-1",   "deloitte",  "Clara Jensen",      "Partner, Financial Services",   "clara.jensen@deloitte.example",     "+1 212 555 0301", "linkedin.com/in/clarajensen",    "partner"),
+    ("c-ntt-1",   "ntt",       "Kenji Sato",        "Alliance Manager",              "kenji.sato@ntt.example",            "+81 3 5555 0144", "linkedin.com/in/kenjisato",      "partner"),
+    # Missing both phone and LinkedIn — the worst case the gate has to report on.
+    ("c-vir-1",   "virtusa",   "Nadia Haddad",      "Engagement Director",           "nadia.haddad@virtusa.example",      "",                "",                               "partner"),
+)
+
+# --- Who is on which deal ----------------------------------------------------
+#
+# (deal key, extra tracked role keys, [(contact key, role key or None)])
+#
+# The three states the model now supports all appear here on purpose, because each one is a thing the
+# deal page renders differently and none of them can be reviewed if the demo data never produces it:
+#
+#   a mapped contact      the ordinary case
+#   an unmapped contact   attached before anyone worked out what they are — role key None
+#   an unfilled role      tracked because the deal needs one, nobody found yet — via the extra roles
+DEAL_PEOPLE = (
+    # A complete champion: this deal can advance.
+    ("d1",  (), (("c-jpmc-1", "champion"), ("c-jpmc-2", "end-customer"))),
+    # Champion with no LinkedIn, so a gated stage will refuse it and say which field is missing.
+    ("d2",  ("executive-sponsor",), (("c-jpmc-3", "champion"), ("c-jpmc-2", "end-customer"))),
+    # Nobody identified yet, and an exec sponsor still being looked for.
+    ("d3",  ("executive-sponsor",), (("c-jpmc-2", None),)),
+    ("d4",  (), (("c-bofa-1", "champion"), ("c-bofa-1", "executive-sponsor"))),
+    ("d5",  (), (("c-bofa-2", "champion"),)),
+    ("d6",  (), (("c-citi-1", "champion"), ("c-citi-2", None))),
+    ("d7",  ("champion",), (("c-citi-2", "end-customer"),)),
+    ("d8",  (), (("c-wells-1", "champion"),)),
+    ("d9",  (), (("c-hsbc-1", "champion"),)),
+    ("d10", (), (("c-pru-1", "champion"),)),
+    ("d11", (), (("c-aetna-1", "champion"),)),
+    # Co-sell deals, each with a partner-side contact. That attachment is the only thing saying a
+    # partner is involved.
+    ("d14", (), (("c-bofa-1", "champion"), ("c-acc-1", "partner-contact"), ("c-acc-2", "partner-contact"))),
+    ("d15", (), (("c-citi-1", "champion"), ("c-acc-1", "partner-contact"))),
+    ("d16", (), (("c-wells-1", "champion"), ("c-del-1", "partner-contact"))),
+    ("d17", ("executive-sponsor",), (("c-hsbc-1", "champion"), ("c-ntt-1", "partner-contact"))),
+    ("d18", (), (("c-pru-1", "champion"), ("c-del-1", "partner-contact"))),
+    ("d19", (), (("c-aetna-1", "champion"), ("c-vir-1", "partner-contact"))),
+    ("d20", (), (("c-jpmc-1", "champion"), ("c-acc-2", "partner-contact"))),
+    ("d22", (), (("c-citi-2", None), ("c-del-1", "partner-contact"))),
+)
+
+# The roles seeded by migration b8e13d5a06c7, by key. Repeated here because the seed builds its schema
+# from the models and cannot assume the migration's INSERT ran.
+CONTACT_ROLES = (
+    ("champion", "Champion", 1, True),
+    ("executive-sponsor", "Executive Sponsor", 2, False),
+    ("end-customer", "End Customer", 3, False),
+    ("partner-contact", "Partner Contact", 4, False),
 )

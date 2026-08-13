@@ -1,8 +1,11 @@
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
-from app.models import Activity, Deal, Health
+from app.models import Activity, Deal, Health, Stage
+from app.schemas.analytics import AgeingRead
 from app.schemas.crm import ActivityDetail, DealDetail
+from app.services import ageing as ageing_service
 from app.services import health as health_service
 
 
@@ -11,13 +14,34 @@ def deal_detail(
     last_activity: dict[uuid.UUID, datetime | None],
     today=None,
     now=None,
+    stage_moves: dict[uuid.UUID, datetime] | None = None,
+    stages: Sequence[Stage] | None = None,
 ) -> DealDetail:
     """
     Flattens a deal and its relations into the single shape every screen consumes, with
     health derived here rather than stored.
+
+    `stage_moves` and `stages` are optional, and ageing is omitted without them rather than guessed. A caller
+    that has not loaded the stage-change timestamps cannot know when a deal arrived where it is, and inventing
+    a figure from creation alone would report every deal as having spent its whole life in its current stage.
+    The endpoints that show ageing load both; the ones that do not, do not pay for the queries.
     """
     touched = last_activity.get(deal.id)
     computed: Health = health_service.deal_health(deal, touched, today=today, now=now)
+
+    aged = None
+    if stages is not None:
+        measured = ageing_service.deal_ageing(
+            deal, stages, (stage_moves or {}).get(deal.id), today
+        )
+        if measured is not None:
+            aged = AgeingRead(
+                basis=measured.basis,
+                days_used=measured.days_used,
+                days_expected=measured.days_expected,
+                days_over=measured.days_over,
+                days_left=measured.days_left,
+            )
 
     return DealDetail(
         id=deal.id,
@@ -33,6 +57,7 @@ def deal_detail(
         expected_close_date=deal.expected_close_date,
         owner_id=deal.owner_id,
         health=computed,
+        ageing=aged,
         account_name=deal.account.name,
         partner_name=deal.partner.name if deal.partner else None,
         lead_business_unit=deal.lead.business_unit if deal.lead else None,

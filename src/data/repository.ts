@@ -22,6 +22,15 @@ function seed(): Snapshot {
     people: [...people],
     accounts: [...accounts],
     leads: [...leads],
+<<<<<<< Updated upstream
+=======
+    // The seeded repository has no contacts or roles. It backs the fixture-driven tests, which
+    // predate both and assert nothing about them; an empty list is the honest starting state.
+    contacts: [],
+    contactRoles: [],
+    // Likewise no champion gaps: the gate needs deal contacts, and this fixture has none.
+    championGaps: [],
+>>>>>>> Stashed changes
     deals: deals.map((d) => ({ ...d })),
     activities: activities.map((a) => ({ ...a })),
     // Deep-copied: templates are editable now, so the fixture must not be mutated.
@@ -149,7 +158,12 @@ export function duplicateTemplate(pipelineId: Id, name: string): PipelineTemplat
   const copy: PipelineTemplate = {
     id: newId('pipe'),
     name,
+<<<<<<< Updated upstream
     tracksPartner: source.tracksPartner,
+=======
+    // The gate comes across with the stages. A copy that dropped it would be a different process.
+    championGatePosition: source.championGatePosition,
+>>>>>>> Stashed changes
     stages: source.stages.map((stage) => ({ ...stage, id: newId('stage') })),
   }
   snapshot = { ...snapshot, pipelines: [...snapshot.pipelines, copy] }
@@ -160,7 +174,13 @@ export function createTemplate(name: string, tracksPartner: boolean): PipelineTe
   const template: PipelineTemplate = {
     id: newId('pipe'),
     name,
+<<<<<<< Updated upstream
     tracksPartner,
+=======
+    // Ungated: the offline path has no wizard to ask, and inventing a gate that cannot be moved later is
+    // worse than leaving one unset.
+    championGatePosition: null,
+>>>>>>> Stashed changes
     // A brand-new pipeline still needs somewhere for deals to land and to finish.
     stages: [
       blankStage('New stage', 10, 1, '#a6bbd1', 'open'),
@@ -184,6 +204,12 @@ function blankStage(
     name,
     shortName: name,
     probability,
+<<<<<<< Updated upstream
+=======
+    expectedDays: kind === 'open' ? 21 : null,
+    championRequired: false,
+    isChampionGate: false,
+>>>>>>> Stashed changes
     color,
     kind,
     position,

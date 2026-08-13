@@ -60,7 +60,6 @@ async def team_overview(
         reps=reps,
         stale_deals=_stale(all_deals, last_activity, today, now, stale_limit),
         total_open_value=sum((r.open_value for r in reps), Decimal("0")),
-        total_weighted_value=sum((r.weighted_value for r in reps), Decimal("0")),
         total_at_risk=sum(r.at_risk_count for r in reps),
     )
 
@@ -127,13 +126,10 @@ def _summarise(
         job_title=person.job_title,
         role=person.role.value,
         open_count=len(open_deals),
-        open_value=sum((Decimal(d.value) for d in open_deals), Decimal("0")),
         # Decimal(...) rather than the raw value: SQLAlchemy hands back a Decimal from the
-        # database but a plain int for an object that has not round-tripped yet, and
-        # int/100 yields a float that will not add to a Decimal.
-        weighted_value=sum(
-            (Decimal(d.value) * d.stage.probability / 100 for d in open_deals), Decimal("0")
-        ),
+        # database but a plain int for an object that has not round-tripped yet, and mixing the two
+        # refuses to sum.
+        open_value=sum((Decimal(d.value) for d in open_deals), Decimal("0")),
         at_risk_count=sum(1 for h in healths.values() if h is Health.AT_RISK),
         closing_this_week_count=sum(1 for h in healths.values() if h is Health.CLOSING_SOON),
         won_count=len(won_deals),

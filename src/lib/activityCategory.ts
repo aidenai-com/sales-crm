@@ -20,6 +20,15 @@ export const activityCategory: Record<ActivityKind, ActivityCategory> = {
   note: 'touchpoint',
   document: 'document',
   'stage-change': 'system',
+<<<<<<< Updated upstream
+=======
+  // An escalation, not work on the deal. Grouped with the machine-written entries because
+  // like them it records that something happened *to* the deal rather than on it.
+  nudge: 'system',
+  // Bookkeeping about who is involved, written by the server. Filing a champion is not the same act as
+  // speaking to one, and the timeline should not let the two look alike.
+  'contact-change': 'system',
+>>>>>>> Stashed changes
 }
 
 export const activityKindLabel: Record<ActivityKind, string> = {
@@ -29,6 +38,11 @@ export const activityKindLabel: Record<ActivityKind, string> = {
   note: 'Note',
   document: 'Document',
   'stage-change': 'Stage change',
+<<<<<<< Updated upstream
+=======
+  nudge: 'Nudge',
+  'contact-change': 'People',
+>>>>>>> Stashed changes
 }
 
 interface CategoryStyle {

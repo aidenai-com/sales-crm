@@ -11,6 +11,7 @@ from sqlalchemy import text
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import SessionLocal, engine
+from app.services import lemlist_sync
 from app.services import reminders as reminders_service
 
 logger = logging.getLogger("app")
@@ -35,14 +36,25 @@ async def lifespan(_: FastAPI):
     else:
         logger.info("REMINDERS_ENABLED is false — no reminder sweep will run")
 
+    # The lemlist reconcile, on the same pattern and off by default. Webhooks keep contacts current in
+    # normal operation; this catches missed deliveries and field edits, which fire no event at all. Off by
+    # default because it spends a user's own lemlist rate limit, and nothing should do that unasked.
+    reconcile: asyncio.Task | None = None
+    if settings.lemlist_nightly_sync_enabled:
+        reconcile = asyncio.create_task(lemlist_sync.reconcile_forever(SessionLocal))
+    else:
+        logger.info("LEMLIST_NIGHTLY_SYNC_ENABLED is false — no lemlist reconcile will run")
+
     yield
 
-    if sweep is not None:
-        sweep.cancel()
+    for task in (sweep, reconcile):
+        if task is None:
+            continue
+        task.cancel()
         # Awaited rather than left dangling, so shutdown waits for the task to unwind its
         # database session instead of racing `engine.dispose()` below.
         with contextlib.suppress(asyncio.CancelledError):
-            await sweep
+            await task
 
     await engine.dispose()
     logger.info("Shut down cleanly")

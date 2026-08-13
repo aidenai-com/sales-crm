@@ -18,7 +18,13 @@ function deal(overrides: Partial<Deal> = {}): Deal {
     expectedCloseDate: new Date(NOW + 60 * dayMs).toISOString(),
     createdAt: new Date(NOW - 90 * dayMs).toISOString(),
     ownerId: 'per-1',
+<<<<<<< Updated upstream
     partnerId: null,
+=======
+    // Health is derived from dates and activity, never from ageing — these tests must keep passing whatever
+    // ageing says, so it is null here rather than a value that could quietly influence a result.
+    ageing: null,
+>>>>>>> Stashed changes
     ...overrides,
   }
 }

@@ -70,7 +70,6 @@ export function TeamPerformance() {
           </Button>
         <dl className="flex items-end gap-32">
           <Total label="Open" value={compactMoney(overview.totalOpenValue)} />
-          <Total label="Weighted" value={compactMoney(overview.totalWeightedValue)} />
           <Total label="At risk" value={String(overview.totalAtRisk)} alarm={overview.totalAtRisk > 0} />
         </dl>
         </div>
@@ -84,7 +83,6 @@ export function TeamPerformance() {
                 <Th>Rep</Th>
                 <Th align="right">Open</Th>
                 <Th align="right">Value</Th>
-                <Th align="right">Weighted</Th>
                 <Th align="right">At risk</Th>
                 <Th align="right">Stalled</Th>
                 <Th align="right">Closing</Th>
@@ -185,7 +183,6 @@ function RepRow({ rep }: { rep: RepPerformance }) {
 
       <Td right muted={empty}>{rep.openCount}</Td>
       <Td right muted={empty}>{compactMoney(rep.openValue)}</Td>
-      <Td right muted={empty}>{compactMoney(rep.weightedValue)}</Td>
       <Td right alarm={rep.atRiskCount > 0}>{rep.atRiskCount}</Td>
       <Td right alarm={rep.stalledCount > 0}>{rep.stalledCount}</Td>
       <Td right muted={rep.closingThisWeekCount === 0}>{rep.closingThisWeekCount}</Td>

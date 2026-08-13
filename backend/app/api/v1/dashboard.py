@@ -44,7 +44,6 @@ async def dashboard_summary(
 
     metrics = DashboardMetrics(
         open_pipeline_value=sum((d.value for d in open_details), Decimal("0")),
-        weighted_pipeline_value=sum((d.weighted_value for d in open_details), Decimal("0")),
         advanced_stage_count=sum(
             1 for d in open_details if d.stage_probability >= health_service.ADVANCED_STAGE_THRESHOLD
         ),

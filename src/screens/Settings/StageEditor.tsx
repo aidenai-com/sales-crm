@@ -33,7 +33,20 @@ export interface StageEditorProps {
   /** Drag affordance supplied by the sortable wrapper. */
   handle: ReactNode
   dragging: boolean
+<<<<<<< Updated upstream
   onPatch: (patch: Partial<Pick<Stage, 'name' | 'shortName' | 'probability' | 'color' | 'kind' | 'wipLimit'>>) => void
+=======
+  onPatch: (
+    patch: Partial<
+      Pick<
+        Stage,
+        // No champion field: the gate is a position on the pipeline, fixed at creation, and the API
+        // refuses it on an update.
+        'name' | 'shortName' | 'probability' | 'color' | 'kind' | 'wipLimit' | 'expectedDays'
+      >
+    >,
+  ) => void
+>>>>>>> Stashed changes
   onDelete: () => Promise<{ deleted: boolean; reason?: string; message?: string }>
   onReassign: (toStageId: string) => Promise<void>
 }
@@ -116,6 +129,13 @@ export function StageEditor({
             {stage.probability}% · {KINDS.find((k) => k.id === stage.kind)?.label} · {dealCount}{' '}
             {dealCount === 1 ? 'deal' : 'deals'}
             {stage.wipLimit !== null && ` · limit ${stage.wipLimit}`}
+<<<<<<< Updated upstream
+=======
+            {stage.expectedDays !== null && ` · ${stage.expectedDays}d expected`}
+            {stage.isChampionGate
+              ? ' · champion gate'
+              : stage.championRequired && ' · champion required'}
+>>>>>>> Stashed changes
           </span>
         </button>
 
@@ -180,8 +200,76 @@ export function StageEditor({
                 onChange={(e) => onPatch({ wipLimit: e.target.value === '' ? null : Number(e.target.value) })}
               />
             </Field>
+            {/* Editable, unlike the gate below, and the difference is the point: this is an expectation
+                nothing is refused for, so revising it re-reads history rather than rewriting it. */}
+            <Field label="Expected days" hint="How long a deal should take here. Blank for no expectation.">
+              <TextInput
+                type="number"
+                min={1}
+                max={365}
+                value={stage.expectedDays ?? ''}
+                disabled={readOnly}
+                onChange={(e) =>
+                  onPatch({
+                    expectedDays:
+                      e.target.value === ''
+                        ? null
+                        : Math.max(1, Math.min(365, Number(e.target.value) || 1)),
+                  })
+                }
+              />
+            </Field>
           </div>
 
+<<<<<<< Updated upstream
+=======
+          {/* The only enforced gate in the app. Everything else on a stage is either reporting
+              configuration or reference content nothing checks, so it is set apart rather than sitting
+              in the grid of numbers above. */}
+          {/* Read-only, and the only thing on this stage that is. The gate is a position on the *pipeline*,
+              decided when the pipeline was created: moving it would make deals that were compliant
+              yesterday non-compliant today. Shown rather than hidden because "does this stage need a
+              champion" is exactly what somebody opening a stage's settings wants to know. */}
+          <div className="mt-16 flex items-start gap-12 rounded-lg border border-hairline bg-cloud p-16">
+            <span
+              aria-hidden="true"
+              className={cn(
+                'mt-[2px] grid size-16 shrink-0 place-items-center rounded-md border',
+                stage.championRequired
+                  ? 'border-signal-blue bg-signal-blue text-paper'
+                  : 'border-mist-gray',
+              )}
+            >
+              {stage.championRequired && (
+                <svg viewBox="0 0 12 12" className="size-8" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M2.5 6.5l2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+            <span>
+              <span className="block text-body-sm font-semibold text-ink-navy">
+                {stage.isChampionGate
+                  ? 'The champion gate starts here'
+                  : stage.championRequired
+                    ? 'Needs a champion'
+                    : 'No champion required'}
+              </span>
+              <span className="mt-[2px] block text-caption text-slate-gray">
+                {stage.isChampionGate
+                  ? 'A deal can arrive here without a champion, and cannot leave without one. The same applies to every stage after this.'
+                  : stage.championRequired
+                    ? 'This stage is past the gate, so a deal cannot move on from here until somebody on it holds the Champion role with their email, phone and LinkedIn recorded.'
+                    : 'Deals move in and out of this stage without a champion on record.'}
+              </span>
+              <span className="mt-8 block text-caption text-mist-gray">
+                Set when this pipeline was created and fixed from then on. To change it, create a new
+                pipeline with the gate where you want it.
+              </span>
+            </span>
+          </div>
+
+
+>>>>>>> Stashed changes
           <div className="mt-16">
             <Field label="Counts as" hint="Only Open stages count toward pipeline value and forecasts.">
               <Select

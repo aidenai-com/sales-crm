@@ -10,6 +10,23 @@ from app.models import Deal, Health, StageKind
 STALE_AFTER_DAYS = 21
 CLOSING_SOON_WITHIN_DAYS = 7
 
+<<<<<<< Updated upstream
+=======
+#: Activity kinds that are recorded but do not count as working the deal.
+#:
+#: NUDGE, and the reason is circular if you get it wrong: an administrator nudges a deal *because* it
+#: has been untouched for three weeks. If the nudge itself counted as a touch, the at-risk flag would
+#: clear the instant it was raised, the deal would look healthy, and the next sweep would stop asking
+#: anyone to do anything about it. The chase would erase its own cause.
+#:
+#: CONTACT_CHANGE for a plainer reason: filing who is involved is not contact with them. A deal whose
+#: champion was mapped three weeks ago and never called since is exactly the stale deal this flag exists
+#: to surface, and letting the bookkeeping clear it would hide the deals most in need of a call.
+#:
+#: Everything else counts, including DOCUMENT: filing a signed NDA is work on the deal.
+NON_TOUCH_KINDS = frozenset({"nudge", "contact-change"})
+
+>>>>>>> Stashed changes
 # Stages at or above this probability count as "advanced" for dashboard reporting (R5).
 ADVANCED_STAGE_THRESHOLD = 55
 

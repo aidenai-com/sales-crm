@@ -14,8 +14,16 @@ from app.models.enums import (
     ActivityKind,
     ActivitySubjectType,
     Health,
+    LemlistSyncStatus,
     StageKind,
     UserRole,
+)
+from app.models.lemlist import (
+    LemlistCampaign,
+    LemlistConnection,
+    LemlistContact,
+    LemlistEngagement,
+    LemlistWebhook,
 )
 from app.models.pipeline import PipelineTemplate, Stage, StageDeliverable
 from app.models.reminder import Reminder
@@ -30,6 +38,12 @@ __all__ = [
     "Deal",
     "DealDeliverableCompletion",
     "Health",
+    "LemlistCampaign",
+    "LemlistConnection",
+    "LemlistContact",
+    "LemlistEngagement",
+    "LemlistSyncStatus",
+    "LemlistWebhook",
     "Lead",
     "PipelineTemplate",
     "Reminder",

@@ -28,6 +28,13 @@ export function dealRows(views: DealView[]): Row[] {
     // Everything is USD; there is no per-row currency column to vary.
     'Value (USD)': v.deal.value,
     'Expected close': fullDate(v.deal.expectedCloseDate),
+    // Named after the clock it was measured on, because the two are not comparable across rows: one counts
+    // days in the current stage, the other days since the deal was created. A single "Age" column in a
+    // spreadsheet would be summed or averaged, and that average would mean nothing.
+    'Age measured on': v.deal.ageing?.basis ?? '',
+    'Days used': v.deal.ageing?.daysUsed ?? '',
+    'Days allowed': v.deal.ageing?.daysExpected ?? '',
+    'Days over': v.deal.ageing?.daysOver ?? '',
     Owner: v.ownerName,
     Status: HEALTH_LABEL[v.health],
   }))

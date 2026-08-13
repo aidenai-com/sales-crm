@@ -20,6 +20,7 @@ import {
   type NewAccount,
   type NewDeal,
   type NewLead,
+  type NewStage,
   type NewUser,
   type StagePatchBody,
 } from '@/api/endpoints'
@@ -31,6 +32,12 @@ const EMPTY: Snapshot = {
   deals: [],
   activities: [],
   pipelines: [],
+<<<<<<< Updated upstream
+=======
+  contacts: [],
+  contactRoles: [],
+  championGaps: [],
+>>>>>>> Stashed changes
 }
 
 export type DeleteStageOutcome =
@@ -68,6 +75,22 @@ interface StoreValue {
    * stage would be an absurd amount of traffic for the information.
    */
   syncDeal: (dealId: Id) => Promise<void>
+  /**
+   * Re-reads which deals fail their stage's champion requirement.
+   *
+   * Kept as an explicit call rather than folded into every mutation because only two things change the
+   * answer: a deal moving stage, and a deal's champion being mapped, unmapped or edited. The first is
+   * in this store and refreshes itself; the second happens in the deal's People panel, which owns its
+   * own state and calls this when it writes.
+   */
+  syncChampionGaps: () => Promise<void>
+  /**
+   * Re-reads the activity feed, for writes that happen outside this store.
+   *
+   * The deal's People panel is the case: it calls the contacts API directly, and those writes log
+   * activity server-side that the timeline beside them has to show without a reload.
+   */
+  syncActivities: () => Promise<void>
   updateDeal: (dealId: Id, patch: DealPatchBody) => Promise<void>
   updateAccount: (accountId: Id, patch: { name?: string; industry?: string; ownerId?: Id }) => Promise<void>
   updateLead: (leadId: Id, patch: { businessUnit?: string; ownerId?: Id }) => Promise<void>
@@ -80,10 +103,18 @@ interface StoreValue {
   }) => Promise<void>
 
   // Pipeline administration (admin only; the API returns 403 for reps)
+<<<<<<< Updated upstream
   updateTemplate: (pipelineId: Id, patch: { name?: string; tracksPartner?: boolean }) => Promise<void>
   createTemplate: (name: string, tracksPartner: boolean, copyStagesFrom?: Id) => Promise<void>
+=======
+  updateTemplate: (pipelineId: Id, patch: { name?: string }) => Promise<void>
+  createTemplate: (
+    name: string,
+    options?: { copyStagesFrom?: Id; stages?: NewStage[]; championGatePosition?: number | null },
+  ) => Promise<void>
+>>>>>>> Stashed changes
   duplicateTemplate: (pipelineId: Id, name: string) => Promise<void>
-  addStage: (pipelineId: Id, name?: string) => Promise<void>
+  addStage: (pipelineId: Id, stage: NewStage) => Promise<void>
   updateStage: (pipelineId: Id, stageId: Id, patch: StagePatchBody) => Promise<void>
   reorderStage: (pipelineId: Id, stageId: Id, toIndex: number) => Promise<void>
   deleteStage: (pipelineId: Id, stageId: Id) => Promise<DeleteStageOutcome>
@@ -174,6 +205,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [load])
 
   /**
+   * Re-reads the activity feed.
+   *
+   * Writes made through the store refetch it themselves via `refetchActivities`. This exists for writes
+   * made *outside* it: the deal's People panel owns its own state and calls the contacts API directly,
+   * and every one of those writes now logs an activity server-side. Without this the timeline on the
+   * same screen would sit there stale until a reload — which is exactly the reload this is here to
+   * avoid.
+   */
+  const syncActivities = useCallback(async () => {
+    try {
+      const activities = await readApi.activities()
+      setSnapshot((current) => ({ ...current, activities }))
+    } catch {
+      // Silent: the write itself succeeded and is already reflected. A failed feed refresh is a stale
+      // timeline, not a lost change, and an error banner would misreport it as the latter.
+    }
+  }, [])
+
+  const syncChampionGaps = useCallback(async () => {
+    try {
+      const championGaps = await readApi.championGaps()
+      setSnapshot((current) => ({ ...current, championGaps }))
+    } catch {
+      // Silent, and deliberately so. This is a warning layer over a gate the server enforces
+      // regardless: a failed refresh means a badge is briefly stale, and putting an error banner over
+      // somebody's board about it would be noise concerning nothing they can act on.
+    }
+  }, [])
+
+  /**
    * Runs a mutation with an optimistic local update.
    *
    * On failure the snapshot captured before the change is restored, so a rejected request
@@ -245,6 +306,65 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       createDeal: (input) =>
         mutate({
+<<<<<<< Updated upstream
+=======
+          key: pendingKey.account(input.accountId),
+          request: () => createApi.contact(input),
+          commit: (current, created) => ({
+            ...current,
+            contacts: [...current.contacts, created].sort((a, b) =>
+              a.fullName.localeCompare(b.fullName),
+            ),
+          }),
+        }),
+
+      updateContact: async (contactId, patch) => {
+        const updated = await mutate({
+          key: pendingKey.contact(contactId),
+          request: () => contactApi.update(contactId, patch),
+          commit: (current, edited) => ({
+            ...current,
+            contacts: current.contacts.map((c) => (c.id === contactId ? edited : c)),
+          }),
+        })
+        // Filling in a champion's phone number is the ordinary way a blocked deal becomes unblocked, and
+        // it happens here rather than on the deal. Without this the warning would survive its own fix.
+        if (updated) void syncChampionGaps()
+        return updated
+      },
+
+      deleteContact: async (contactId) => {
+        const result = await mutate({
+          key: pendingKey.contact(contactId),
+          // Optimistic. A deleted row vanishing immediately is the expected feel, and `mutate`
+          // restores the pre-change snapshot if the request is refused.
+          optimistic: (current) => ({
+            ...current,
+            contacts: current.contacts.filter((c) => c.id !== contactId),
+          }),
+          request: () => contactApi.remove(contactId),
+        })
+        return result !== null
+      },
+
+      createDeal: async (input) => {
+        // The guard rail, at the one place every deal creation passes through.
+        //
+        // The API accepts a deal with no contacts — deliberately, so that requiring them cannot mask an
+        // ownership error and so existing callers keep working — which makes this the boundary that
+        // actually enforces the rule. `CreateDealForm` disables its button for the same reason, but a
+        // check that lives only in one component is one refactor away from being gone.
+        //
+        // Reported through the store's own error channel rather than thrown: every other refusal a user
+        // can cause surfaces the same way, and a thrown error here would be an unhandled rejection in
+        // whichever component happened to call it.
+        if (input.contacts.length === 0) {
+          setError('A deal needs at least one contact. Add the person you are dealing with.')
+          return null
+        }
+
+        return mutate({
+>>>>>>> Stashed changes
           request: () => createApi.deal(input),
           commit: (current, created) => ({ ...current, deals: [...current.deals, created] }),
         }),
@@ -285,8 +405,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // The move is logged server-side; pull it in so timelines stay truthful.
           refetchActivities: true,
         })
+        // The deal is now answering to a different stage's requirement, so a warning may have appeared
+        // or cleared. Only on success: a refused move left the deal exactly where it was.
+        if (result !== null) void syncChampionGaps()
         return result !== null
       },
+
+      syncChampionGaps,
+      syncActivities,
 
       syncDeal: async (dealId) => {
         // No optimistic update and no rollback: there is no local change to undo. This
@@ -316,6 +442,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           refetchActivities: patch.stageId !== undefined,
         })
+        // A stage change through the generic patch is still a stage change, so the same refresh applies.
+        if (patch.stageId !== undefined) void syncChampionGaps()
       },
 
       updateAccount: async (accountId, patch) => {
@@ -377,9 +505,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
       },
 
+<<<<<<< Updated upstream
       createTemplate: async (name, tracksPartner, copyStagesFrom) => {
         await mutate({
           request: () => pipelineApi.create(name, tracksPartner, copyStagesFrom),
+=======
+      createTemplate: async (name, options) => {
+        await mutate({
+          request: () => pipelineApi.create(name, options),
+>>>>>>> Stashed changes
           commit: (current, created) => ({ ...current, pipelines: [...current.pipelines, created] }),
         })
       },
@@ -392,10 +526,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
       },
 
-      addStage: async (pipelineId, name = 'New stage') => {
+      addStage: async (pipelineId, stage) => {
         await mutate({
           key: pendingKey.pipeline(pipelineId),
-          request: () => pipelineApi.addStage(pipelineId, name),
+          request: () => pipelineApi.addStage(pipelineId, stage),
           commit: (current, updated) => ({
             ...current,
             pipelines: current.pipelines.map((p) => (p.id === updated.id ? updated : p)),
@@ -494,7 +628,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSnapshot((current) => ({ ...current, deals }))
       },
     }
-  }, [snapshot, status, loadError, error, inFlight, pending, load, mutate, beginRequest, endRequest])
+  }, [
+    snapshot,
+    status,
+    loadError,
+    error,
+    inFlight,
+    pending,
+    load,
+    mutate,
+    beginRequest,
+    endRequest,
+    syncChampionGaps,
+    syncActivities,
+  ])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

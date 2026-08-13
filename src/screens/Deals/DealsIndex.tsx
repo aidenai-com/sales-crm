@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/Button'
 import { Link, routes } from '@/app/router'
 import { buildDealViews, type DealView } from '@/lib/rollup'
 import { dealRows } from '@/lib/export'
-import { compactMoney, relativeToNow } from '@/lib/format'
+import { compactMoney, fullDate, relativeToNow } from '@/lib/format'
 import { HEALTH_LABEL, REASON_LABEL } from '@/lib/health'
+import { ChampionBadge, useChampionGap } from '@/components/ui/ChampionWarning'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { HealthBadge } from '@/components/ui/Badge'
@@ -17,7 +18,7 @@ import { FilterPill, Segmented, ToggleChip } from '@/components/ui/Segmented'
 import { cn } from '@/lib/cn'
 import { PipelineOverview } from './PipelineOverview'
 
-type SortKey = 'opportunity' | 'stage' | 'value' | 'close' | 'owner' | 'health'
+type SortKey = 'opportunity' | 'stage' | 'value' | 'close' | 'owner' | 'health' | 'ageing'
 type Direction = 'asc' | 'desc'
 
 /** Rank for sorting by status: the thing needing attention sorts to the top. */
@@ -47,6 +48,15 @@ const COMPARATORS: Record<SortKey, { compare: (a: DealView, b: DealView) => numb
     initial: 'asc',
   },
   owner: { compare: (a, b) => a.ownerName.localeCompare(b.ownerName), initial: 'asc' },
+  ageing: {
+    // Days over first, then days used, so the deals that have run past their allowance sort above the ones
+    // that have merely been open a while. A single "days in stage" sort would put a healthy long-cycle deal
+    // above a short-cycle one that is badly overdue.
+    compare: (a, b) =>
+      (a.deal.ageing?.daysOver ?? -1) - (b.deal.ageing?.daysOver ?? -1) ||
+      (a.deal.ageing?.daysUsed ?? -1) - (b.deal.ageing?.daysUsed ?? -1),
+    initial: 'desc',
+  },
   health: {
     compare: (a, b) => HEALTH_RANK[a.health] - HEALTH_RANK[b.health] || b.deal.value - a.deal.value,
     initial: 'asc',
@@ -130,10 +140,12 @@ export function DealsIndex() {
     return result.sort((a, b) => compare(a, b) * sign)
   }, [scoped, query, pipelineFilter, healthFilter, stageFilter, sort])
 
-  const totalValue = filtered.filter((v) => v.isOpen).reduce((sum, v) => sum + v.deal.value, 0)
-  const weighted = filtered
-    .filter((v) => v.isOpen)
-    .reduce((sum, v) => sum + (v.deal.value * v.stage.probability) / 100, 0)
+  const open = filtered.filter((v) => v.isOpen)
+  const totalValue = open.reduce((sum, v) => sum + v.deal.value, 0)
+  // No weighted total. It was the same money multiplied by each stage's progression percentage, which is
+  // not a probability — so the figure read as a forecast and was arithmetic on a scale that does not
+  // carry likelihood. The company count replaces it: a real second fact about the same set.
+  const accountCount = new Set(open.map((v) => v.deal.accountId)).size
 
   const stageFilterName = stageFilter
     ? (snapshot.pipelines.flatMap((p) => p.stages).find((s) => s.id === stageFilter)?.name ?? null)
@@ -225,12 +237,12 @@ export function DealsIndex() {
             </div>
             <div className="rounded-2xl bg-cloud p-16">
               <dt className="text-caption font-semibold tracking-wide text-slate-gray uppercase">
-                Weighted
+                Companies
               </dt>
               <dd className="mt-8 text-subheading font-bold text-ink-navy tabular-nums">
-                {compactMoney(weighted)}
+                {accountCount}
               </dd>
-              <dd className="mt-8 text-caption text-slate-gray">By stage probability</dd>
+              <dd className="mt-8 text-caption text-slate-gray">With open deals</dd>
             </div>
           </dl>
         </Card>
@@ -356,6 +368,14 @@ export function DealsIndex() {
                   <SortableTh sortKey="close" sort={sort} onSort={toggleSort} align="right">
                     Close
                   </SortableTh>
+                  {/* "Age", not "In stage": the figure is days in the current stage only when a stage move
+                      has been logged for the deal. Without one it is days since the deal was created,
+                      measured against the cumulative allowance — and most deals have no logged move, so
+                      "In stage" would be the wrong label on the majority of rows. The tooltip on each cell
+                      says which clock it used. */}
+                  <SortableTh sortKey="ageing" sort={sort} onSort={toggleSort} align="right">
+                    Age
+                  </SortableTh>
                   <SortableTh sortKey="owner" sort={sort} onSort={toggleSort}>
                     Owner
                   </SortableTh>
@@ -436,7 +456,12 @@ function SortableTh({
 }
 
 function DealRow({ view }: { view: DealView }) {
+<<<<<<< Updated upstream
   const { deal, account, lead, partner, stage } = view
+=======
+  const { deal, account, lead, stage } = view
+  const championGap = useChampionGap(deal.id)
+>>>>>>> Stashed changes
 
   return (
     <tr className="border-b border-hairline transition-colors last:border-0 hover:bg-cloud">
@@ -461,8 +486,20 @@ function DealRow({ view }: { view: DealView }) {
             style={{ backgroundColor: stage.color }}
             aria-hidden="true"
           />
-          <span className="text-body-sm text-ink-navy">{stage.shortName}</span>
-          <span className="text-caption text-mist-gray tabular-nums">{stage.probability}%</span>
+          <span className="text-body-sm text-ink-navy" title={stage.name}>
+            {stage.shortName}
+          </span>
+          {/* Labelled on hover. A bare "40%" beside a dollar figure invites exactly the reading that the
+              weighted-value column was removed for: it is how far along the process this stage is, not the
+              chance of the deal closing. */}
+          <span
+            className="text-caption text-mist-gray tabular-nums"
+            title={`${stage.name} is ${stage.probability}% of the way through this pipeline`}
+          >
+            {stage.probability}%
+          </span>
+          {/* In the stage cell, because the stage is what is demanding a champion. */}
+          {championGap && <ChampionBadge gap={championGap} />}
         </span>
       </td>
 
@@ -470,8 +507,41 @@ function DealRow({ view }: { view: DealView }) {
         {compactMoney(deal.value)}
       </td>
 
-      <td className="px-16 py-8 text-right text-caption whitespace-nowrap text-slate-gray">
+      {/* Relative, because "12 days overdue" is the fact somebody acts on. The date itself is on hover, so
+          the column stays scannable without hiding it. */}
+      <td
+        className="px-16 py-8 text-right text-caption whitespace-nowrap text-slate-gray"
+        title={fullDate(deal.expectedCloseDate)}
+      >
         {relativeToNow(deal.expectedCloseDate)}
+      </td>
+
+      {/* Ageing as a pill rather than a bar: a table row is 40px tall and a bar with a label under it does
+          not fit, whereas "137d over" is the whole story in four characters and a colour. The bar lives on
+          the deal page and in the exception report, where there is room to show it against its allowance.
+
+          Sits between Close and Owner to match its header — the cell and the `th` have to move together, and
+          having them apart is how a table ends up printing a date under "In stage". */}
+      <td className="px-16 py-8 text-right align-middle">
+        {deal.ageing ? (
+          <span
+            title={
+              deal.ageing.daysExpected === null
+                ? `${deal.ageing.daysUsed} days, no expectation set`
+                : `${deal.ageing.daysUsed} of ${deal.ageing.daysExpected} days${
+                    deal.ageing.basis === 'cycle' ? ' for the cycle so far' : ` in ${stage.name}`
+                  }`
+            }
+            className={cn(
+              'inline-block rounded-md px-8 text-caption font-semibold tabular-nums',
+              deal.ageing.daysOver > 0 ? 'bg-risk-fill text-risk' : 'bg-pebble text-slate-gray',
+            )}
+          >
+            {deal.ageing.daysOver > 0 ? `${deal.ageing.daysOver}d over` : `${deal.ageing.daysUsed}d`}
+          </span>
+        ) : (
+          <span className="text-caption text-mist-gray">—</span>
+        )}
       </td>
 
       <td className="px-16 py-8 text-body-sm text-slate-gray">{view.ownerName}</td>

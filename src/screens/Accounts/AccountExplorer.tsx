@@ -6,11 +6,33 @@ import { buildDealViews, buildTree, filterTree } from '@/lib/rollup'
 import { dealRows } from '@/lib/export'
 import { TextInput } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
+import { Segmented } from '@/components/ui/Segmented'
 import { ExportButton } from '@/components/ui/ExportButton'
 import { Card, EmptyState } from '@/components/ui/Card'
 import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { AccountRow } from './AccountRow'
 
+<<<<<<< Updated upstream
+=======
+type Scope = 'active' | 'all'
+
+/**
+ * Whether this company is one somebody is actually working.
+ *
+ * Derived, never stored. An account row carries only a name, an industry and an owner; a business unit
+ * or a deal underneath it is what makes it business. That means a company filed purely to hold a
+ * contact — somebody you know at a firm that is not buying anything — is a legitimate row that simply
+ * has nothing under it, and this list stops presenting it as an account being worked.
+ *
+ * A flag on the account would be the same mistake `is_partner` was: something a person has to remember
+ * to set, which goes stale the day the first deal is created. This cannot go stale, because it *is* the
+ * condition.
+ */
+function hasBusiness(node: AccountNode): boolean {
+  return node.leads.length > 0 || node.directDeals.length > 0
+}
+
+>>>>>>> Stashed changes
 /**
  * Replaces flat tables with hierarchical navigation: Account -> Lead -> Deal (R3).
  *
@@ -82,6 +104,7 @@ export function AccountExplorer() {
       </div>
 
       <div className="mb-24 flex flex-wrap items-center justify-between gap-16">
+<<<<<<< Updated upstream
         <TextInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -89,6 +112,31 @@ export function AccountExplorer() {
           aria-label="Search accounts, leads, and deals"
           className="w-[380px]"
         />
+=======
+        <div className="flex flex-wrap items-center gap-16">
+          <TextInput
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search accounts, business units, deals, owners"
+            aria-label="Search accounts, leads, and deals"
+            className="w-[380px]"
+          />
+
+          {/* Only shown once there is something to hide. With nothing filed but working accounts, a
+              filter offering to reveal none of them is a control that does nothing. */}
+          {directoryOnly > 0 && (
+            <Segmented
+              label="Which companies to show"
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'active', label: 'Active', count: tree.length - directoryOnly },
+                { value: 'all', label: 'All companies', count: tree.length },
+              ]}
+            />
+          )}
+        </div>
+>>>>>>> Stashed changes
         <div className="flex items-center gap-8">
           {/* Accounts are admin-created; reps add business units and deals within them. */}
           {isAdmin && (
